@@ -44,15 +44,21 @@ def load_recipes(path: str) -> list[Recipe]:
         data = json.load(fh)
     recipes: list[Recipe] = []
     for r in data.get("recipes", []):
-        unlock = None
-        if r.get("unlock"):
-            unlock = (r["unlock"]["collection"], int(r["unlock"]["tier"]))
-        recipes.append(Recipe(
-            output=r["output"],
-            inputs=tuple((i[0], int(i[1])) for i in r["inputs"]),
-            output_qty=int(r.get("output_qty", 1)),
-            unlock=unlock,
-        ))
+        # Skip malformed / example entries rather than crashing the whole app.
+        try:
+            if not isinstance(r, dict) or not r.get("output") or not r.get("inputs"):
+                continue
+            unlock = None
+            if r.get("unlock"):
+                unlock = (r["unlock"]["collection"], int(r["unlock"]["tier"]))
+            recipes.append(Recipe(
+                output=str(r["output"]),
+                inputs=tuple((str(i[0]), int(i[1])) for i in r["inputs"]),
+                output_qty=int(r.get("output_qty", 1)),
+                unlock=unlock,
+            ))
+        except (KeyError, ValueError, TypeError, IndexError):
+            continue
     return recipes
 
 

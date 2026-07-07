@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from . import craft as craftmod
 from . import flip as flipmod
+from . import projection as projmod
 from .accounts import AccountContext
 from .bazaar import Market
 from .craft import CraftPlan, Recipe
@@ -249,8 +250,97 @@ def render_portfolio(account: AccountContext, portfolio: list) -> str:
     out.append(
         f" Expected profit this cycle: {coins(total_profit)}"
         f"   ·   combined ~{coins(total_cph)}/hr running in parallel")
+    proj = projmod.project_bazaar_income(portfolio, account.active_hours)
+    out.append(
+        f" At your capital: ~{coins(proj.coins_per_hour)}/hr → "
+        f"~{coins(proj.per_day)}/day ({account.active_hours:g}h) → "
+        f"~{coins(proj.per_week)}/week  (reinvest to compound)")
     out.append(
         f" Longest position fills in ~{minutes(max_time)}. Re-run to re-price as "
         f"the market moves.")
     out.append("─" * 68)
+    return "\n".join(out)
+
+
+def _one_line_action(plan) -> str:
+    if isinstance(plan, FlipPlan):
+        return (f"buy {plan.quantity:,} {nice_name(plan.product_id)} @ "
+                f"{price(plan.buy_order_price)} → sell @ {price(plan.sell_offer_price)}"
+                f"  ({coins(plan.total_profit)}, +{plan.margin:.1%})")
+    return (f"craft {plan.quantity:,}× {nice_name(plan.output_id)}"
+            f"  ({coins(plan.total_profit)}, +{plan.margin:.1%})")
+
+
+def render_status(account: AccountContext, portfolio: list, mp_plan: dict,
+                  ah: dict | None = None, prog_diff: dict | None = None) -> str:
+    """The ecosystem dashboard: capital → income → goals → AH → next action."""
+    src = "live" if account.live else "config"
+    proj = projmod.project_bazaar_income(portfolio, account.active_hours)
+    out = [
+        "═" * 68,
+        f" NULL'S ADDONS · ECOSYSTEM STATUS — {account.name}  [{src}]",
+        "═" * 68,
+        f" Capital: {coins(account.budget)}   ·   {account.risk} risk"
+        f"   ·   {proj.positions} live positions",
+    ]
+    if prog_diff and prog_diff.get("baseline") and prog_diff.get("lines"):
+        out.append(f" Today: " + " · ".join(prog_diff["lines"][:2]))
+
+    out.append("")
+    out.append(" ── Bazaar income potential ──")
+    if portfolio:
+        out.append(f"   Deploy {coins(proj.capital_deployed)} across "
+                   f"{proj.positions} positions → {coins(proj.coins_per_hour)}/hr")
+        out.append(f"   ≈ {coins(proj.per_day)} / {account.active_hours:g}h day"
+                   f"   ·   ≈ {coins(proj.per_week)} / week")
+        out.append("   (capital-limited; reinvest profits to compound faster)")
+    else:
+        out.append("   No qualifying flips right now — try --risk aggressive.")
+
+    # Goals
+    out.append("")
+    out.append(" ── Goals ──")
+    if account.coin_goal:
+        eta = projmod.eta_to_coins(account.budget, account.coin_goal,
+                                   proj.coins_per_hour)
+        remaining = max(0, account.coin_goal - account.budget)
+        out.append(f"   Coins {coins(account.budget)} → {coins(account.coin_goal)}"
+                   f"  ({coins(remaining)} to go): "
+                   f"{projmod.human_duration(eta, account.active_hours)}")
+    picks = (mp_plan or {}).get("picks") or []
+    recombs = (mp_plan or {}).get("recombs") or []
+    if account.mp_goal:
+        out.append(f"   Magical Power goal: {account.mp_goal} MP"
+                   + (f" · owned accessories detected: {mp_plan.get('owned_count', 0)}"
+                      if account.live else ""))
+    if picks:
+        b = picks[0]
+        out.append(f"   Cheapest MP: {b.label} +{b.mp_gain} MP for {coins(b.cost)}"
+                   f" ({coins(b.coins_per_mp)}/MP)")
+    if recombs:
+        b = recombs[0]
+        afford = projmod.hours_to_earn(b.cost, proj.coins_per_hour)
+        out.append(f"   Best recomb: {coins(b.coins_per_mp)}/MP — afford one in "
+                   f"{projmod.human_duration(afford, account.active_hours)}")
+
+    # Auction House
+    if ah:
+        out.append("")
+        out.append(" ── Auction House ──")
+        listing = ah.get("listings")
+        if listing:
+            out.append(f"   {listing.active} active · {listing.sold_claimable} "
+                       f"sold & claimable ({coins(listing.sold_value)})")
+        elif not account.live:
+            out.append("   run --live with an API key to see your listings")
+        if ah.get("recent_sales"):
+            name, p = ah["recent_sales"][0]
+            out.append(f"   top recent sale: {nice_name(name)} {coins(p)}")
+
+    # Next action
+    if portfolio:
+        out.append("")
+        out.append(" ── Do this now ──")
+        out.append("   " + _one_line_action(portfolio[0]))
+    out.append("═" * 68)
     return "\n".join(out)

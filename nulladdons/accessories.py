@@ -85,11 +85,18 @@ def load_accessories(path: str) -> list[Accessory]:
         data = json.load(fh)
     out = []
     for a in data.get("accessories", []):
-        out.append(Accessory(
-            id=a["id"], name=a.get("name", a["id"]),
-            family=a.get("family", a["id"]).lower(),
-            rarity=a["rarity"].upper(), acquire=a.get("acquire", {}),
-        ))
+        # Skip malformed entries so a bad hand-added accessory can't crash the app.
+        try:
+            if not isinstance(a, dict) or not a.get("id") or not a.get("rarity"):
+                continue
+            out.append(Accessory(
+                id=str(a["id"]), name=str(a.get("name", a["id"])),
+                family=str(a.get("family", a["id"])).lower(),
+                rarity=str(a["rarity"]).upper(),
+                acquire=a.get("acquire", {}) if isinstance(a.get("acquire", {}), dict) else {},
+            ))
+        except (KeyError, ValueError, TypeError):
+            continue
     return out
 
 

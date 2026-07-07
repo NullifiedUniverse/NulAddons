@@ -23,6 +23,7 @@ Item identity comes from the NBT ``item_bytes`` via :mod:`nulladdons.nbt`.
 from __future__ import annotations
 
 import json
+import math
 import os
 import statistics
 import time
@@ -36,27 +37,46 @@ MAX_SALES = 40_000
 AH_TAX = 0.01
 
 
+def _f(value, default: float = 0.0) -> float:
+    """Coerce to a finite float; ``default`` on None/str/NaN/inf/bad."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    return f if math.isfinite(f) else default
+
+
 def decode_item(item_bytes: str) -> dict | None:
-    """Return ``{id, count, name}`` for an auction's item, or ``None``."""
-    root = nbt.parse_b64(item_bytes)
-    items = root.get("i") if isinstance(root, dict) else None
-    if not items:
-        return None
-    it = items[0] or {}
-    tag = it.get("tag") or {}
-    extra = tag.get("ExtraAttributes") or {}
-    item_id = extra.get("id")
-    if not item_id:
-        return None
-    # Pets all share id "PET"; their real identity is in petInfo (a JSON string).
-    if item_id == "PET" and extra.get("petInfo"):
+    """Return ``{id, count, name}`` for an auction's item, or ``None``.
+
+    Fully defensive: any malformed / newly-added item type yields ``None`` rather
+    than raising."""
+    try:
+        root = nbt.parse_b64(item_bytes)
+        items = root.get("i") if isinstance(root, dict) else None
+        if not items or not isinstance(items[0], dict):
+            return None
+        it = items[0]
+        tag = it.get("tag") or {}
+        extra = (tag.get("ExtraAttributes") or {}) if isinstance(tag, dict) else {}
+        item_id = extra.get("id")
+        if not item_id or not isinstance(item_id, str):
+            return None
+        # Pets share id "PET"; their real identity is in petInfo (a JSON string).
+        if item_id == "PET" and extra.get("petInfo"):
+            try:
+                info = json.loads(extra["petInfo"])
+                item_id = f"{info.get('type', 'PET')}_{info.get('tier', '')}_PET"
+            except (ValueError, TypeError):
+                pass
+        name = (tag.get("display") or {}).get("Name") if isinstance(tag, dict) else None
         try:
-            info = json.loads(extra["petInfo"])
-            item_id = f"{info.get('type', 'PET')}_{info.get('tier', '')}_PET"
-        except (ValueError, TypeError):
-            pass
-    name = ((tag.get("display") or {}).get("Name") or item_id)
-    return {"id": item_id, "count": int(it.get("Count", 1) or 1), "name": name}
+            count = max(1, int(it.get("Count", 1) or 1))
+        except (TypeError, ValueError):
+            count = 1
+        return {"id": item_id, "count": count, "name": name or item_id}
+    except Exception:
+        return None
 
 
 def sales_from_ended(ended: list[dict]) -> list[dict]:
@@ -67,7 +87,7 @@ def sales_from_ended(ended: list[dict]) -> list[dict]:
         if not info:
             continue
         count = max(1, info["count"])
-        price = float(a.get("price", 0))
+        price = _f(a.get("price"))
         out.append({
             "auction_id": a.get("auction_id"),
             "id": info["id"],
@@ -75,7 +95,7 @@ def sales_from_ended(ended: list[dict]) -> list[dict]:
             "price": price,
             "unit_price": price / count,
             "bin": bool(a.get("bin")),
-            "ts": int(a.get("timestamp", 0)),
+            "ts": int(_f(a.get("timestamp"))),
         })
     return out
 
@@ -141,9 +161,9 @@ class SalePriceIndex:
                     for line in fh:
                         try:
                             s = json.loads(line)
-                        except ValueError:
+                            by_id.setdefault(s["id"], []).append(_f(s["unit_price"]))
+                        except (ValueError, KeyError, TypeError):
                             continue
-                        by_id.setdefault(s["id"], []).append(float(s["unit_price"]))
             except OSError:
                 pass
         return cls(by_id)
@@ -178,12 +198,14 @@ def player_listing_summary(player_auctions: list[dict], now_ms: int | None = Non
     active_value = sold_value = 0.0
     lines: list[str] = []
     for a in player_auctions:
+        if not isinstance(a, dict):
+            continue
         info = decode_item(a.get("item_bytes", ""))
         name = info["name"] if info else a.get("item_name", "?")
-        price = float(a.get("highest_bid_amount") or a.get("starting_bid") or 0)
-        ended = bool(a.get("claimed")) or a.get("end", 0) < now_ms
+        price = _f(a.get("highest_bid_amount")) or _f(a.get("starting_bid"))
+        ended = bool(a.get("claimed")) or _f(a.get("end"), now_ms) < now_ms
         bids = a.get("bids") or []
-        won = ended and (a.get("highest_bid_amount", 0) > 0 or bids)
+        won = ended and (_f(a.get("highest_bid_amount")) > 0 or bool(bids))
         if won:
             sold += 1
             sold_value += price
@@ -224,9 +246,9 @@ def find_bin_flips(fetch_page, index: SalePriceIndex, max_pages: int = 3,
     for page_no in range(total_pages):
         page = page0 if page_no == 0 else fetch_page(page_no)
         for a in page.get("auctions", []):
-            if not a.get("bin"):
+            if not isinstance(a, dict) or not a.get("bin"):
                 continue
-            buy = float(a.get("starting_bid", 0))
+            buy = _f(a.get("starting_bid"))
             if buy <= 0:
                 continue
             info = decode_item(a.get("item_bytes", ""))

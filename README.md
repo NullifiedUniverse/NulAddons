@@ -43,6 +43,7 @@ No dependencies — just Python 3.9+ and an internet connection.
 
 ```bash
 # from the repo root
+python3 -m nulladdons status               # ecosystem dashboard: capital → income → goals
 python3 -m nulladdons plan                 # the headline: a full session plan
 python3 -m nulladdons flips --top 10       # ranked order flips
 python3 -m nulladdons crafts               # ranked craft flips
@@ -81,6 +82,30 @@ nulls-addons plan
 ```
 
 ---
+
+## The ecosystem: capital → income → goals (`status`)
+
+Everything is wired to your **live capital**.  `status` is the hub that ties it
+together and answers *"how much can I make from the Bazaar with what's in my bank
+right now, and how close am I to my goals?"*:
+
+```
+ Capital: 50.00M   ·   balanced risk   ·   5 live positions
+ ── Bazaar income potential ──
+   Deploy 49.9M across 5 positions → 24.4M/hr
+   ≈ 146M / 6h day   ·   ≈ 1.02B / week   (reinvest to compound)
+ ── Goals ──
+   Coins 50.00M → 500.00M (450M to go): 18.4h (~3.1 days @6h/day)
+   Best recomb: 1.89M/MP — afford one in 28 min
+ ── Auction House ──   2 sold & claimable (12.0M) · 3 active
+ ── Do this now ──   buy 7,144 Enchanted Mithril @ 2,379.3 → 2.56M (+15.1%)
+```
+
+The projection is honest: positions are **sized to what your bank can afford**,
+so the rate is capital‑limited, and it's flagged that reinvesting profits each
+cycle compounds faster than the linear figure.  Set `coin_goal`, `mp_goal` and
+`active_hours` per account and the ETAs update automatically.  `plan` shows the
+same income projection as a footer.
 
 ## The promise: "as easy as possible, profit as safe as possible"
 
@@ -324,6 +349,7 @@ never load‑bearing for correctness, and is instructed never to invent numbers.
 
 | Command | Does |
 |---|---|
+| `status` | Ecosystem dashboard: live capital → income projection → goal ETAs → next action. |
 | `plan` | Diversified, budgeted set of orders to place now (default). |
 | `flips` | Ranked order flips. |
 | `crafts` | Ranked craft flips. |
@@ -340,9 +366,10 @@ Common flags: `-a/--account`, `-b/--budget`, `-r/--risk`, `--hold-time`,
 
 ### Per‑account config (`config/accounts.json`)
 
-`budget`, `risk`, `cookie_buffed`, `notes`, plus: `mp_goal`, `owned_families`,
-`blacklist`/`whitelist` (product ids to force‑skip or restrict to), `webhook_url`
-and `alert` thresholds.  Top‑level keys apply to all accounts: `hypixel_api_key`,
+`budget`, `risk`, `cookie_buffed`, `notes`, plus: `mp_goal`, `coin_goal`,
+`active_hours` (flipping hours/day used for income projections & ETAs),
+`owned_families`, `blacklist`/`whitelist` (product ids to force‑skip or restrict
+to), `webhook_url` and `alert` thresholds.  Top‑level keys apply to all accounts: `hypixel_api_key`,
 `gemini_api_key`, `gemini_model`, `discord_webhook_url`, and default `alert`
 thresholds.  Any of these can also come from `--flags` or the `HYPIXEL_API_KEY` /
 `GEMINI_API_KEY` environment variables.
@@ -358,6 +385,7 @@ nulladdons/
   hypixel.py     Zero-dependency API client (bazaar, Mojang UUID, profiles)
   history.py     Local price-history log for volatility & mean reversion
   economy.py     The theory: congestion-aware fill time, sizing, confidence, coins/hour
+  projection.py  Live capital -> hourly/daily/weekly income + goal ETAs (ecosystem glue)
   flip.py        Order-flip finder (+ blacklist/whitelist)
   craft.py       Craft-flip finder (recursive cheapest-acquisition arbitrage)
   accessories.py Magical Power planner (coins/MP, Recombobulator lever)
@@ -374,10 +402,21 @@ config/accounts.json     Account settings (budget, risk, blacklist, mp_goal, key
 data/recipes.json        Craft recipe database
 data/accessories.json    Accessory / Magical-Power database
 data/sample_bazaar.json  Bundled snapshot for --offline / demos
-tests/                    Unit tests (no network): test_core / test_features / test_brief
+tests/                    Unit tests (no network): test_core / test_features / test_brief / test_ecosystem
 ```
 
-Run the tests with `python3 -m unittest discover -s tests` (40 tests).
+Run the tests with `python3 -m unittest discover -s tests` (49 tests).
+
+### Robustness — new items never crash the app
+
+SkyBlock adds Bazaar products, item ids and accessories constantly, and users add
+their own recipes/accessories.  Every ingestion point is defensive: numeric API
+fields are coerced through a finite‑float guard (a `null`, a string, or even a
+`NaN` price can't crash a parse or poison a calculation), a single unparseable
+Bazaar product or auction item is skipped rather than sinking the batch, and the
+recipe/accessory loaders skip malformed entries.  The progress diff tolerates
+snapshots written by older versions of the tool.  This is covered by a dedicated
+crash‑resistance test that feeds deliberate garbage through every parser.
 
 ## Hypixel APIs used
 

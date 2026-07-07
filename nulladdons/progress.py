@@ -15,6 +15,7 @@ tested.
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 from datetime import datetime, timezone
@@ -38,14 +39,30 @@ def _get(node, *keys, default=None):
     return node
 
 
+def _num(value, default: float = 0.0) -> float:
+    """Coerce to a finite float; ``default`` on None/str/dict/NaN/inf."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    return f if math.isfinite(f) else default
+
+
+def _int(value, default: int = 0) -> int:
+    n = _num(value, default)
+    return int(n) if math.isfinite(n) else default
+
+
 def level_from_xp(xp: float, skill_levels: list[dict] | None) -> int | None:
     """Cumulative-XP -> level using a resource ``levels`` list, or ``None``."""
     if not skill_levels:
         return None
     lvl = 0
     for entry in skill_levels:
-        if xp >= entry.get("totalExpRequired", float("inf")):
-            lvl = entry.get("level", lvl)
+        if not isinstance(entry, dict):
+            continue
+        if xp >= _num(entry.get("totalExpRequired"), math.inf):
+            lvl = _int(entry.get("level"), lvl)
         else:
             break
     return lvl
@@ -55,7 +72,7 @@ def _skill_xp(member: dict, skill: str) -> float | None:
     v = _get(member, "player_data", "experience", f"SKILL_{skill}")
     if v is None:
         v = member.get(f"experience_skill_{skill.lower()}")
-    return float(v) if v is not None else None
+    return _num(v) if v is not None else None
 
 
 def pick_member(payload: dict, uuid: str) -> tuple[dict, dict]:
@@ -79,8 +96,8 @@ def extract_stats(profile: dict, member: dict, skills_resource: dict | None
     purse = _get(member, "currencies", "coin_purse")
     if purse is None:
         purse = member.get("coin_purse")
-    purse = float(purse or 0)
-    bank = float(_get(profile, "banking", "balance", default=0) or 0)
+    purse = _num(purse)
+    bank = _num(_get(profile, "banking", "balance"))
 
     skills: dict[str, dict] = {}
     levels_for_avg = []
@@ -96,12 +113,15 @@ def extract_stats(profile: dict, member: dict, skills_resource: dict | None
     skill_avg = round(sum(levels_for_avg) / len(levels_for_avg), 2) if levels_for_avg else None
 
     collection = member.get("collection") or {}
+    if not isinstance(collection, dict):
+        collection = {}
     slayer_src = _get(member, "slayer", "slayer_bosses") or member.get("slayer_bosses") or {}
-    slayer = {boss: int(_get(data, "xp", default=0) or 0)
+    slayer = {boss: int(_num(_get(data, "xp")))
               for boss, data in slayer_src.items() if isinstance(data, dict)}
 
-    cata_xp = _get(member, "dungeons", "dungeon_types", "catacombs", "experience", default=0)
+    cata_xp = _get(member, "dungeons", "dungeon_types", "catacombs", "experience")
     pets = _get(member, "pets_data", "pets") or member.get("pets") or []
+    pets_count = len(pets) if isinstance(pets, (list, dict)) else 0
     fairy = _get(member, "fairy_soul", "total_collected")
     if fairy is None:
         fairy = member.get("fairy_souls_collected", 0)
@@ -116,13 +136,13 @@ def extract_stats(profile: dict, member: dict, skills_resource: dict | None
         "coins": round(purse + bank),
         "skills": skills,
         "skill_average": skill_avg,
-        "collections_sum": sum(int(v or 0) for v in collection.values()),
+        "collections_sum": int(sum(_num(v) for v in collection.values())),
         "collections_count": len(collection),
         "slayer": slayer,
         "slayer_total": sum(slayer.values()),
-        "catacombs_xp": int(cata_xp or 0),
-        "pets": len(pets),
-        "fairy_souls": int(fairy or 0),
+        "catacombs_xp": int(_num(cata_xp)),
+        "pets": pets_count,
+        "fairy_souls": int(_num(fairy)),
     }
 
 
@@ -178,18 +198,22 @@ def diff(previous: dict | None, current: dict) -> dict:
         return {"baseline": False, "lines": ["First snapshot — no baseline to "
                                              "compare yet. Run again tomorrow."],
                 "coins_delta": 0, "days": 0}
-    days = max(0, (current["ts"] - previous["ts"]) / 86400.0)
+    days = max(0, (current.get("ts", 0) - previous.get("ts", 0)) / 86400.0)
     lines: list[str] = []
 
-    coins_delta = current["coins"] - previous["coins"]
+    def delta(key):  # tolerates snapshots written by older tool versions
+        return int(_num(current.get(key))) - int(_num(previous.get(key)))
+
+    coins_delta = delta("coins")
     if coins_delta:
         lines.append(f"Coins: {_signed(coins_delta)} "
-                     f"(now {current['coins']:,})")
+                     f"(now {current.get('coins', 0):,})")
 
     if current.get("skill_average") is not None and previous.get("skill_average") is not None:
-        d = round(current["skill_average"] - previous["skill_average"], 2)
-        if d:
-            lines.append(f"Skill Average: {_signed(d)} (now {current['skill_average']})")
+        avg_d = round(current["skill_average"] - previous["skill_average"], 2)
+        if avg_d:
+            lines.append(f"Skill Average: {_signed(avg_d)} "
+                         f"(now {current['skill_average']})")
 
     skill_gains = {}
     for skill, cur in current.get("skills", {}).items():
@@ -208,21 +232,16 @@ def diff(previous: dict | None, current: dict) -> dict:
         lines.append("Top skill XP: " + ", ".join(
             f"{s.title()} +{x:,}" for s, x in top))
 
-    slayer_d = current["slayer_total"] - previous["slayer_total"]
-    if slayer_d:
-        lines.append(f"Slayer XP: +{slayer_d:,}")
-    cata_d = current["catacombs_xp"] - previous["catacombs_xp"]
-    if cata_d:
-        lines.append(f"Catacombs XP: +{cata_d:,}")
-    coll_d = current["collections_sum"] - previous["collections_sum"]
-    if coll_d:
-        lines.append(f"Collections: +{coll_d:,} items")
-    pet_d = current["pets"] - previous["pets"]
-    if pet_d:
-        lines.append(f"Pets: {_signed(pet_d)} (now {current['pets']})")
-    fairy_d = current["fairy_souls"] - previous["fairy_souls"]
-    if fairy_d:
-        lines.append(f"Fairy Souls: +{fairy_d}")
+    if delta("slayer_total"):
+        lines.append(f"Slayer XP: +{delta('slayer_total'):,}")
+    if delta("catacombs_xp"):
+        lines.append(f"Catacombs XP: +{delta('catacombs_xp'):,}")
+    if delta("collections_sum"):
+        lines.append(f"Collections: +{delta('collections_sum'):,} items")
+    if delta("pets"):
+        lines.append(f"Pets: {_signed(delta('pets'))} (now {current.get('pets', 0)})")
+    if delta("fairy_souls"):
+        lines.append(f"Fairy Souls: +{delta('fairy_souls')}")
 
     if not lines:
         lines.append("No measurable change since the last snapshot.")

@@ -25,10 +25,27 @@ We expose these as ``best_ask`` / ``best_bid`` and ``demand_per_week`` /
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field
 
 from . import mechanics
+
+
+def _num(value, default: float = 0.0) -> float:
+    """Coerce to a finite float; ``default`` on None/str/NaN/inf/bad values.
+
+    Rejecting NaN/inf matters: a NaN price would slip past a ``<= 0`` check and
+    poison every downstream calculation."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    return f if math.isfinite(f) else default
+
+
+def _int(value, default: int = 0) -> int:
+    return int(_num(value, default))
 
 
 @dataclass
@@ -97,17 +114,23 @@ def parse_product(pid: str, blob: dict) -> Product | None:
     Build a :class:`Product` from one raw API entry, or ``None`` if the entry is
     unusable (missing a side of the book, malformed, etc.).
     """
+    if not isinstance(blob, dict):
+        return None
     q = blob.get("quick_status") or {}
     buy_summary = blob.get("buy_summary") or []    # asks
     sell_summary = blob.get("sell_summary") or []  # bids
 
     if not buy_summary or not sell_summary:
         return None  # one-sided market: cannot flip it safely
+    if not isinstance(buy_summary[0], dict) or not isinstance(sell_summary[0], dict):
+        return None
 
-    best_ask = buy_summary[0].get("pricePerUnit", 0.0)
-    best_ask_amount = int(buy_summary[0].get("amount", 0))
-    best_bid = sell_summary[0].get("pricePerUnit", 0.0)
-    best_bid_amount = int(sell_summary[0].get("amount", 0))
+    # Every field is coerced defensively: a newly added product with a null or
+    # oddly-typed field must never crash the whole market parse.
+    best_ask = _num(buy_summary[0].get("pricePerUnit"))
+    best_ask_amount = _int(buy_summary[0].get("amount"))
+    best_bid = _num(sell_summary[0].get("pricePerUnit"))
+    best_bid_amount = _int(sell_summary[0].get("amount"))
 
     if best_ask <= 0 or best_bid <= 0:
         return None
@@ -118,14 +141,14 @@ def parse_product(pid: str, blob: dict) -> Product | None:
         best_ask=best_ask,
         best_bid_amount=best_bid_amount,
         best_ask_amount=best_ask_amount,
-        insta_buy_price=float(q.get("buyPrice", best_ask)),
-        insta_sell_price=float(q.get("sellPrice", best_bid)),
-        demand_per_week=int(q.get("buyMovingWeek", 0)),
-        supply_per_week=int(q.get("sellMovingWeek", 0)),
-        ask_volume=int(q.get("buyVolume", 0)),
-        bid_volume=int(q.get("sellVolume", 0)),
-        ask_orders=int(q.get("buyOrders", 0)),
-        bid_orders=int(q.get("sellOrders", 0)),
+        insta_buy_price=_num(q.get("buyPrice"), best_ask),
+        insta_sell_price=_num(q.get("sellPrice"), best_bid),
+        demand_per_week=_int(q.get("buyMovingWeek")),
+        supply_per_week=_int(q.get("sellMovingWeek")),
+        ask_volume=_int(q.get("buyVolume")),
+        bid_volume=_int(q.get("sellVolume")),
+        ask_orders=_int(q.get("buyOrders")),
+        bid_orders=_int(q.get("sellOrders")),
         raw=blob,
     )
 
@@ -162,7 +185,11 @@ class Market:
         """Build a Market from a raw ``/skyblock/bazaar`` response payload."""
         parsed: dict[str, Product] = {}
         for pid, blob in (payload.get("products") or {}).items():
-            product = parse_product(pid, blob)
+            try:
+                product = parse_product(pid, blob)
+            except Exception:
+                # Belt-and-braces: one unparseable product never sinks the market.
+                product = None
             if product is not None:
                 parsed[pid] = product
         return cls(parsed, last_updated=payload.get("lastUpdated"))

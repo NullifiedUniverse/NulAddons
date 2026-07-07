@@ -22,11 +22,25 @@ markets with a comfortable margin and high confidence.
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass, field
 
 from . import hypixel, mechanics, nbt
 from .economy import EvalParams
+
+
+def _num(value, default: float = 0.0) -> float:
+    """Coerce config / live-profile values to a finite float; default on bad input."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    return f if math.isfinite(f) else default
+
+
+def _int(value, default: int = 0) -> int:
+    return int(_num(value, default))
 
 # Each profile is a set of overrides applied on top of EvalParams' defaults.
 RISK_PROFILES: dict[str, dict] = {
@@ -80,6 +94,8 @@ class AccountContext:
     whitelist: set[str] | None = None                  # if set, only these ids
     # Progression
     mp_goal: int = 0                                   # target Magical Power
+    coin_goal: int = 0                                 # target coin balance
+    active_hours: float = 6.0                          # flipping hours/day for projections
     owned_families: set[str] = field(default_factory=set)   # accessory families owned
     owned_item_ids: set[str] = field(default_factory=set)   # from live talisman bag
     current_mp: int | None = None                      # from live talisman bag, if read
@@ -109,8 +125,8 @@ def _extract_live_budget(profiles_payload: dict, uuid: str) -> tuple[float | Non
     collections: dict[str, int] = {}
     for profile in profiles:
         member = (profile.get("members") or {}).get(uuid) or {}
-        purse = float(member.get("coin_purse", 0) or 0)
-        bank = float((profile.get("banking") or {}).get("balance", 0) or 0)
+        purse = _num(member.get("coin_purse"))
+        bank = _num((profile.get("banking") or {}).get("balance"))
         total = purse + bank
         selected = profile.get("selected", False)
         if best_budget is None or total > best_budget or selected:
@@ -169,7 +185,7 @@ def build_context(name: str, config: dict, *, live: bool = False,
     best_case = bool(acc.get("best_case_tax", False))
     tax = mechanics.sell_tax(cookie_buffed=cookie, best_case=best_case)
 
-    budget = float(acc.get("budget", 0))
+    budget = _num(acc.get("budget"))
     uuid = None
     collections: dict[str, int] = {}
     owned_ids: set[str] = set()
@@ -204,7 +220,9 @@ def build_context(name: str, config: dict, *, live: bool = False,
         allowed_outputs=None,  # unlock-gating is opt-in; see README
         blacklist=set(acc.get("blacklist", [])),
         whitelist=set(acc["whitelist"]) if acc.get("whitelist") else None,
-        mp_goal=int(acc.get("mp_goal", 0)),
+        mp_goal=_int(acc.get("mp_goal")),
+        coin_goal=_int(acc.get("coin_goal")),
+        active_hours=_num(acc.get("active_hours"), 6.0),
         owned_families=set(acc.get("owned_families", [])),
         owned_item_ids=owned_ids,
         webhook_url=webhook,

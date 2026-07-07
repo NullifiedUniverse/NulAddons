@@ -97,6 +97,10 @@ def build_parser() -> argparse.ArgumentParser:
     ah.add_argument("--scan", type=int, default=0, metavar="PAGES",
                     help="scan PAGES of the live AH for underpriced BIN flips")
 
+    st = sub.add_parser("status", help="ecosystem dashboard: capital → income → goals")
+    _add_common(st)
+    st.add_argument("--accessories", default=DEFAULT_ACCESSORIES)
+
     br = sub.add_parser("brief", help="daily SkyBlock brief (progress + Gemini insights)")
     _add_common(br)
     br.add_argument("--accessories", default=DEFAULT_ACCESSORIES)
@@ -317,6 +321,56 @@ def _resolve_uuid(ctx):
     return ctx.uuid or hypixel.resolve_uuid(ctx.username)
 
 
+def _load_progress(ctx, api_key, save: bool):
+    """Fetch profile -> (stats, prog_diff, uuid). All None without a key/profile."""
+    if not api_key:
+        return None, None, None
+    uuid = _resolve_uuid(ctx)
+    payload = hypixel.fetch_profiles(uuid, api_key) if uuid else None
+    if not payload:
+        return None, None, uuid
+    skills_res = hypixel.fetch_resource("skills")
+    profile, member = progress.pick_member(payload, uuid)
+    stats = progress.extract_stats(profile, member, skills_res)
+    hist = progress.load_history(ctx.name)
+    prog_diff = progress.diff(progress.previous_snapshot(hist, stats), stats)
+    if save:
+        progress.save_snapshot(ctx.name, stats)
+    return stats, prog_diff, uuid
+
+
+def _ah_context(ctx, api_key, uuid, top_sales: int = 3):
+    """Assemble Auction House highlights: recent sales + your listings."""
+    sales = auction.sales_from_ended(hypixel.fetch_auctions_ended())
+    auction.record_sales(sales)
+    recent = [(s["id"], s["price"])
+              for s in sorted(sales, key=lambda x: x["price"], reverse=True)[:top_sales]]
+    listings = None
+    if api_key and uuid:
+        listings = auction.player_listing_summary(
+            hypixel.fetch_player_auctions(uuid, api_key))
+    return {"recent_sales": recent, "listings": listings}
+
+
+def _cmd_status(args):
+    market, history = _load_market(args)
+    ctx, config = _build_account(args)
+    api_key = args.api_key or config.get("hypixel_api_key")
+    recipes = craft.load_recipes(args.recipes)
+    portfolio = commands.build_portfolio(ctx, market, recipes, history)
+    mp_plan = _mp_plan_for(ctx, market, args.accessories, recipes)
+    _, prog_diff, uuid = _load_progress(ctx, api_key, save=False)
+    ah = _ah_context(ctx, api_key, uuid)
+    out = commands.render_status(ctx, portfolio, mp_plan, ah, prog_diff)
+    print(out)
+    if args.webhook:
+        embed = {"title": f"📊 Ecosystem Status — {ctx.name}",
+                 "description": "```\n" + out[:3900] + "\n```", "color": 0x1ABC9C}
+        ok = notify.post_webhook(args.webhook, embeds=[embed])
+        print(f"· status {'posted to' if ok else 'FAILED to post to'} Discord",
+              file=sys.stderr)
+
+
 def _mp_plan_for(ctx, market, accessories_path, recipes):
     accs = accessoriesmod.load_accessories(accessories_path)
     engine = accessoriesmod.AccessoryEngine(market, accs, recipes)
@@ -380,19 +434,8 @@ def _cmd_brief(args):
     recipes = craft.load_recipes(args.recipes)
 
     # 1) Progress snapshot + day-over-day diff (needs a Hypixel key).
-    stats = prog_diff = None
-    uuid = None
-    if api_key:
-        uuid = _resolve_uuid(ctx)
-        payload = hypixel.fetch_profiles(uuid, api_key) if uuid else None
-        if payload:
-            skills_res = hypixel.fetch_resource("skills")
-            profile, member = progress.pick_member(payload, uuid)
-            stats = progress.extract_stats(profile, member, skills_res)
-            hist = progress.load_history(ctx.name)
-            prog_diff = progress.diff(progress.previous_snapshot(hist, stats), stats)
-            progress.save_snapshot(ctx.name, stats)
-    else:
+    stats, prog_diff, uuid = _load_progress(ctx, api_key, save=True)
+    if not api_key:
         print("· no Hypixel key — market-only brief (set hypixel_api_key for "
               "progress tracking)", file=sys.stderr)
 
@@ -405,17 +448,7 @@ def _cmd_brief(args):
     mp_plan = _mp_plan_for(ctx, market, args.accessories, recipes)
 
     # 3) Auction House highlights.
-    sales = auction.sales_from_ended(hypixel.fetch_auctions_ended())
-    auction.record_sales(sales)
-    index = auction.SalePriceIndex.load()
-    recent = [(s["id"], s["price"])
-              for s in sorted(sales, key=lambda x: x["price"], reverse=True)[:6]]
-    listings = None
-    if api_key and uuid:
-        listings = auction.player_listing_summary(
-            hypixel.fetch_player_auctions(uuid, api_key))
-    ah = {"recent_sales": recent, "index_size": len(index._by_id),
-          "listings": listings}
+    ah = _ah_context(ctx, api_key, uuid, top_sales=6)
 
     ctxd = briefmod.build_context(
         ctx, data_age=market.age_seconds(), stats=stats, prog_diff=prog_diff,
@@ -455,7 +488,8 @@ def _cmd_accounts(args):
 _DISPATCH = {
     "plan": _cmd_plan, "flips": _cmd_flips, "crafts": _cmd_crafts,
     "item": _cmd_item, "mp": _cmd_mp, "alert": _cmd_alert,
-    "ah": _cmd_ah, "brief": _cmd_brief, "accounts": _cmd_accounts,
+    "ah": _cmd_ah, "brief": _cmd_brief, "status": _cmd_status,
+    "accounts": _cmd_accounts,
 }
 
 
