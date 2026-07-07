@@ -376,6 +376,34 @@ built from the same facts; **no Hypixel key** → a market‑only brief (no prog
 The LLM only ever adds prose on top of numbers the tool already computed — it is
 never load‑bearing for correctness, and is instructed never to invent numbers.
 
+## Game‑aware: the Mayor runs the economy
+
+Every ~5 SkyBlock days the community elects a **Mayor** whose perks reshape the
+market — and most spreadsheets ignore it.  Null's Addons reads the live election
+(`resources/skyblock/election`, no key) and adapts:
+
+* **Derpy** ("Tax Evasion") zeroes the Bazaar & AH tax.  The tool sets tax to 0%,
+  every margin recalculates, and it tells you to flip big.
+* **Mining** mayors (Cole / Mining Fiesta) glut the ore supply → *"buy ores
+  cheap; sell your enchanted‑ore stock **before** the dump."*  **Farming**
+  (Finnegan) and **Fishing** (Marina) do the same for crops and sea‑creature drops.
+* Upcoming **candidates** become a heads‑up: `Next election: Cole ⛏️, Marina 🎣`.
+
+The active mayor shows on `status`, `plan`, `flips`, `crafts` and feeds the daily
+brief.  And you can **simulate** any mayor to plan ahead:
+
+```bash
+python3 -m nulladdons flips --mayor derpy   # see every flip at 0% tax
+python3 -m nulladdons plan  --mayor cole     # plan around a mining glut
+```
+
+## Market movers (pump/dump radar)
+
+`status` also mines your accumulated price‑history log for the biggest recent
+movers among liquid items (`📈 Ice Bait +42%  ·  📉 Raw Fish −18%`) — a free
+signal for event spikes, pumps and manipulation.  It deepens the more you run the
+tool.
+
 ## Command reference
 
 | Command | Does |
@@ -418,6 +446,7 @@ nulladdons/
   hypixel.py     Zero-dependency API client (bazaar, Mojang UUID, profiles)
   history.py     Local price-history log for volatility & mean reversion
   economy.py     The theory: congestion-aware fill time, sizing, confidence, coins/hour
+  mayor.py       Live Mayor/Election economics (Derpy tax-free, mining/farming gluts)
   projection.py  Live capital -> hourly/daily/weekly income + goal ETAs (ecosystem glue)
   flip.py        Order-flip finder (+ blacklist/whitelist)
   craft.py       Craft-flip finder (recursive cheapest-acquisition arbitrage)
@@ -437,10 +466,10 @@ config/accounts.json     Bundled example config (your real one lives in ~/.nulla
 data/recipes.json        Craft recipe database
 data/accessories.json    Accessory / Magical-Power database
 data/sample_bazaar.json  Bundled snapshot for --offline / demos
-tests/                    Unit tests (no network): test_core / test_features / test_brief / test_ecosystem / test_onboarding
+tests/                    Unit tests (no network): test_core / test_features / test_brief / test_ecosystem / test_onboarding / test_mayor
 ```
 
-Run the tests with `python3 -m unittest discover -s tests` (61 tests).
+Run the tests with `python3 -m unittest discover -s tests` (69 tests).
 
 ### Robustness — new items never crash the app
 

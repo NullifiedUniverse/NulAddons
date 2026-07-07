@@ -57,6 +57,23 @@ def nice_name(product_id: str) -> str:
     return base.replace("_", " ").title()
 
 
+def mayor_lines(mc) -> list[str]:
+    """Render the active/simulated mayor as a few concise lines (or none)."""
+    if mc is None:
+        return []
+    out = [f"👑 {mc.headline()}"]
+    out += [f"   {n}" for n in mc.notes]
+    from . import mayor as mayormod
+    cand = mayormod.candidates_line(mc)
+    if cand:
+        out.append(f"   {cand}")
+    return out
+
+
+def mayor_banner(mc) -> str:
+    return "\n".join(mayor_lines(mc))
+
+
 # --- single-opportunity renderers ------------------------------------------
 
 def render_flip(plan: FlipPlan, index: int | None = None) -> str:
@@ -230,6 +247,10 @@ def render_portfolio(account: AccountContext, portfolio: list) -> str:
         f" NULL'S ADDONS · SESSION PLAN — {account.summary()}",
         "═" * 68,
     ]
+    mayor_ctx = getattr(account, "mayor", None)
+    if mayor_ctx is not None:
+        out += mayor_lines(mayor_ctx)
+        out.append("")
     if not portfolio:
         out.append("No opportunities clear this account's risk floor right now.")
         out.append("Try a lower-risk-floor profile (e.g. --risk aggressive) or "
@@ -272,7 +293,8 @@ def _one_line_action(plan) -> str:
 
 
 def render_status(account: AccountContext, portfolio: list, mp_plan: dict,
-                  ah: dict | None = None, prog_diff: dict | None = None) -> str:
+                  ah: dict | None = None, prog_diff: dict | None = None,
+                  movers: list | None = None) -> str:
     """The ecosystem dashboard: capital → income → goals → AH → next action."""
     src = "live" if account.live else "config"
     proj = projmod.project_bazaar_income(portfolio, account.active_hours)
@@ -285,6 +307,12 @@ def render_status(account: AccountContext, portfolio: list, mp_plan: dict,
     ]
     if prog_diff and prog_diff.get("baseline") and prog_diff.get("lines"):
         out.append(f" Today: " + " · ".join(prog_diff["lines"][:2]))
+
+    mayor_ctx = getattr(account, "mayor", None)
+    if mayor_ctx is not None:
+        out.append("")
+        out.append(" ── Mayor ──")
+        out += [f"  {ln}" for ln in mayor_lines(mayor_ctx)]
 
     out.append("")
     out.append(" ── Bazaar income potential ──")
@@ -336,6 +364,14 @@ def render_status(account: AccountContext, portfolio: list, mp_plan: dict,
         if ah.get("recent_sales"):
             name, p = ah["recent_sales"][0]
             out.append(f"   top recent sale: {nice_name(name)} {coins(p)}")
+
+    # Market movers (from your accumulated price history)
+    if movers:
+        out.append("")
+        out.append(" ── Market movers (over your recent history) ──")
+        for pid, pct in movers:
+            arrow = "📈" if pct >= 0 else "📉"
+            out.append(f"   {arrow} {nice_name(pid)}  {pct:+.0%}")
 
     # Next action
     if portfolio:

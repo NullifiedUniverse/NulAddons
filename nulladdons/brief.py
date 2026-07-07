@@ -43,6 +43,13 @@ def facts_text(ctx: dict) -> str:
         if s.get("catacombs_xp"):
             lines.append(f"CATACOMBS XP: {s['catacombs_xp']:,}")
 
+    mc = getattr(acc, "mayor", None)
+    if mc is not None:
+        lines.append("MAYOR: " + mc.name +
+                     (" — TAX-FREE (0% Bazaar tax right now!)" if mc.tax_free else ""))
+        for n in mc.notes[:2]:
+            lines.append(f"- {n}")
+
     pd = ctx.get("prog_diff") or {}
     if pd.get("lines"):
         span = f" ({pd.get('days', 0)}d)" if pd.get("baseline") else ""

@@ -101,6 +101,24 @@ class PriceHistory:
             return None
         return statistics.pstdev(vals) / mean
 
+    def movers(self, window: int = 8, min_samples: int = 3) -> dict[str, float]:
+        """
+        Fractional price change over the recent ``window`` snapshots, per product.
+
+        A creative reuse of the history log: sharp moves flag pumps/dumps, event
+        spikes, or manipulation the caller can turn into a warning or an entry.
+        Returns ``{product_id -> pct_change}`` (empty until history exists).
+        """
+        out: dict[str, float] = {}
+        for pid, vals in self.series.items():
+            if len(vals) < min_samples:
+                continue
+            recent = vals[-window:]
+            old, new = recent[0], recent[-1]
+            if old > 0:
+                out[pid] = (new - old) / old
+        return out
+
     def zscore(self, pid: str, current_mid: float) -> float | None:
         """
         How many standard deviations the current mid sits from its recent mean.

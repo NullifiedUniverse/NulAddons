@@ -125,6 +125,8 @@ class AccountContext:
     # Notifications
     webhook_url: str | None = None
     alert: dict = field(default_factory=dict)          # crucial-message thresholds
+    # Live game macro-economy (set by the CLI from the election)
+    mayor: object | None = None                        # a mayor.MayorContext
 
     def summary(self) -> str:
         src = "live profile" if self.live else "config"

@@ -30,7 +30,7 @@ import time
 from . import accessories as accessoriesmod
 from . import accounts as accountsmod
 from . import (auction, brief as briefmod, commands, craft, economy, flip,
-               hypixel, llm, mechanics, notify, onboarding, progress, ui)
+               hypixel, llm, mayor, mechanics, notify, onboarding, progress, ui)
 from .bazaar import Market
 from .history import PriceHistory, record_snapshot
 
@@ -60,6 +60,8 @@ def _add_common(p: argparse.ArgumentParser) -> None:
                    help="Hypixel API key (or set HYPIXEL_API_KEY)")
     p.add_argument("--webhook", default=None,
                    help="Discord webhook URL to post to (overrides config)")
+    p.add_argument("--mayor", default=None, metavar="NAME",
+                   help="simulate a mayor's economy (e.g. --mayor derpy for 0%% tax)")
     p.add_argument("--offline", nargs="?", const=DEFAULT_SAMPLE, default=None,
                    help="use a saved bazaar snapshot instead of the network")
     p.add_argument("--recipes", default=DEFAULT_RECIPES,
@@ -183,6 +185,18 @@ def _resolve_account_name(args, config) -> str:
     return requested
 
 
+def _mayor_context(args):
+    """The active (or simulated) SkyBlock mayor, or None when offline."""
+    if getattr(args, "mayor", None):
+        return mayor.simulate(args.mayor)
+    if getattr(args, "offline", None):
+        return None
+    try:
+        return mayor.build_context(hypixel.fetch_resource("election"))
+    except Exception:
+        return None
+
+
 def _build_account(args):
     config = accountsmod.load_config()
     name = _resolve_account_name(args, config)
@@ -199,6 +213,10 @@ def _build_account(args):
         ctx.params.min_confidence = max(ctx.params.min_confidence, 0.6)
         ctx.params.min_margin = max(ctx.params.min_margin, 0.03)
         ctx.params.require_instant_profit = True
+    # Fold the live game macro-economy (the Mayor) into the tax.
+    ctx.mayor = _mayor_context(args)
+    if ctx.mayor is not None:
+        ctx.params.tax *= ctx.mayor.tax_multiplier
     return ctx, config
 
 
@@ -220,7 +238,10 @@ def _cmd_flips(args):
     ctx, _ = _build_account(args)
     plans = flip.find_flips(market, ctx.params, ctx.budget, history, limit=args.top,
                             blacklist=ctx.blacklist, whitelist=ctx.whitelist)
-    print(f"Top {len(plans)} order flips — {ctx.summary()}\n")
+    print(f"Top {len(plans)} order flips — {ctx.summary()}")
+    if ctx.mayor is not None:
+        print(commands.mayor_banner(ctx.mayor))
+    print()
     if not plans:
         print("No flips clear this risk floor. Try --risk aggressive.")
         return
@@ -236,7 +257,10 @@ def _cmd_crafts(args):
     plans = craft.find_crafts(market, recipes, ctx.params, ctx.budget, history,
                               ctx.allowed_outputs, limit=args.top,
                               blacklist=ctx.blacklist, whitelist=ctx.whitelist)
-    print(f"Top {len(plans)} craft flips — {ctx.summary()}\n")
+    print(f"Top {len(plans)} craft flips — {ctx.summary()}")
+    if ctx.mayor is not None:
+        print(commands.mayor_banner(ctx.mayor))
+    print()
     if not plans:
         print("No craft flips clear this risk floor right now.")
         return
@@ -388,6 +412,20 @@ def _ah_context(ctx, api_key, uuid, top_sales: int = 3):
     return {"recent_sales": recent, "listings": listings}
 
 
+def _market_movers(market, history, min_liquidity: int = 500_000,
+                   min_move: float = 0.05, top: int = 5):
+    """Biggest recent price moves among liquid products (pumps/dumps radar)."""
+    if history is None:
+        return []
+    ranked = []
+    for pid, pct in history.movers().items():
+        product = market.get(pid)
+        if product and product.liquidity >= min_liquidity and abs(pct) >= min_move:
+            ranked.append((pid, pct))
+    ranked.sort(key=lambda x: abs(x[1]), reverse=True)
+    return ranked[:top]
+
+
 def _cmd_status(args):
     market, history = _load_market(args)
     ctx, config = _build_account(args)
@@ -397,7 +435,8 @@ def _cmd_status(args):
     mp_plan = _mp_plan_for(ctx, market, args.accessories, recipes)
     _, prog_diff, uuid = _load_progress(ctx, api_key, save=False)
     ah = _ah_context(ctx, api_key, uuid)
-    out = commands.render_status(ctx, portfolio, mp_plan, ah, prog_diff)
+    movers = _market_movers(market, history)
+    out = commands.render_status(ctx, portfolio, mp_plan, ah, prog_diff, movers)
     print(out)
     if args.webhook:
         embed = {"title": f"📊 Ecosystem Status — {ctx.name}",
