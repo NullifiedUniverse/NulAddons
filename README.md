@@ -37,12 +37,43 @@ Diamond`), and sell the product for more than the mats cost.
 
 ---
 
-## Quick start
+## Getting started (first run)
 
-No dependencies — just Python 3.9+ and an internet connection.
+No dependencies — just Python 3.9+ and an internet connection.  One command sets
+everything up:
 
 ```bash
-# from the repo root
+python3 -m nulladdons setup     # friendly wizard — 2 minutes
+```
+
+The wizard walks you through it and validates as you go:
+
+1. **API keys & integrations** (all optional): a free **Hypixel** key
+   ([developer.hypixel.net](https://developer.hypixel.net)) for live capital,
+   progress tracking and your AH listings; a **Gemini** key
+   ([aistudio.google.com/apikey](https://aistudio.google.com/apikey)) for the AI
+   daily brief; a **Discord webhook** for alerts — it sends a test message to
+   confirm it works.
+2. **Accounts**: type a Minecraft username (it resolves the UUID live), pick a
+   risk profile, set the budget (or pull your real purse + bank if you gave a
+   key), and set optional coin / Magical‑Power goals.
+
+Your answers are written to a private (`chmod 600`) `~/.nulladdons/accounts.json`
+— so a fresh clone or a `pip install` both just work, and your keys stay in your
+home dir, not the repo.  Then check everything's healthy:
+
+```bash
+python3 -m nulladdons doctor    # verifies keys, accounts & connectivity, with fix hints
+python3 -m nulladdons status    # you're ready — the ecosystem dashboard
+```
+
+Prefer to skip the wizard?  Edit `config/accounts.json` (the bundled example) or
+set `HYPIXEL_API_KEY` / `GEMINI_API_KEY` env vars.  Point at any config with
+`NULLADDONS_CONFIG=/path/to/accounts.json`.
+
+## All the commands
+
+```bash
 python3 -m nulladdons status               # ecosystem dashboard: capital → income → goals
 python3 -m nulladdons plan                 # the headline: a full session plan
 python3 -m nulladdons flips --top 10       # ranked order flips
@@ -349,6 +380,8 @@ never load‑bearing for correctness, and is instructed never to invent numbers.
 
 | Command | Does |
 |---|---|
+| `setup` | Interactive first‑run wizard: keys, Discord, accounts, goals (writes `~/.nulladdons/accounts.json`). |
+| `doctor` | Health check: validates keys, resolves accounts, tests connectivity — with a fix hint per line. |
 | `status` | Ecosystem dashboard: live capital → income projection → goal ETAs → next action. |
 | `plan` | Diversified, budgeted set of orders to place now (default). |
 | `flips` | Ranked order flips. |
@@ -394,18 +427,20 @@ nulladdons/
   progress.py    Account snapshots + day-over-day progression diff
   llm.py         Google Gemini client (SkyBlock-expert brain of the brief)
   brief.py       Assembles the daily brief (facts -> Gemini -> summary)
-  accounts.py    Per-account personalisation & risk profiles
+  accounts.py    Per-account personalisation, risk profiles & config resolution
+  onboarding.py  Setup wizard + doctor health check
+  ui.py          Tiny terminal toolkit (colour + EOF-safe prompts)
   commands.py    Renders plans into direct commands + the diversified portfolio
   notify.py      Discord webhook notifier for crucial messages
   cli.py         Command-line interface
-config/accounts.json     Account settings (budget, risk, blacklist, mp_goal, keys, webhook…)
+config/accounts.json     Bundled example config (your real one lives in ~/.nulladdons/)
 data/recipes.json        Craft recipe database
 data/accessories.json    Accessory / Magical-Power database
 data/sample_bazaar.json  Bundled snapshot for --offline / demos
-tests/                    Unit tests (no network): test_core / test_features / test_brief / test_ecosystem
+tests/                    Unit tests (no network): test_core / test_features / test_brief / test_ecosystem / test_onboarding
 ```
 
-Run the tests with `python3 -m unittest discover -s tests` (49 tests).
+Run the tests with `python3 -m unittest discover -s tests` (61 tests).
 
 ### Robustness — new items never crash the app
 

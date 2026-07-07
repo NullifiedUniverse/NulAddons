@@ -1,18 +1,23 @@
 """
 Null's Addons -- command-line interface.
 
-Subcommands
------------
-* ``plan``     -- the headline view: a diversified, budgeted set of orders to
-                  place right now (default if you pass no subcommand).
-* ``flips``    -- ranked list of order flips (buy order -> wait -> sell offer).
-* ``crafts``   -- ranked list of craft flips (buy mats -> craft -> sell).
-* ``item ID``  -- deep dive on a single product.
-* ``accounts`` -- show configured accounts (with live capital if a key is set).
+First run
+---------
+* ``setup``    -- interactive wizard: API keys, Discord, accounts, goals.
+* ``doctor``   -- check keys, accounts and connectivity, with fix hints.
 
-Global options let you override the account's budget, risk profile, patience and
-margin floor, run fully offline against a saved snapshot, or flip on
-``--guaranteed`` mode (strict, near-risk-free filters).
+Every day
+---------
+* ``status``   -- ecosystem dashboard: capital -> income -> goals -> next action.
+* ``plan``     -- diversified, budgeted set of orders to place now (default).
+* ``brief``    -- daily progress + opportunities, summarised by Gemini.
+
+Deep dives
+----------
+* ``flips`` / ``crafts`` / ``mp`` / ``ah`` / ``item ID`` / ``alert`` / ``accounts``.
+
+Global options override budget, risk, patience and margin, run offline against a
+saved snapshot, or flip on ``--guaranteed`` (strict, near-risk-free filters).
 """
 
 from __future__ import annotations
@@ -25,7 +30,7 @@ import time
 from . import accessories as accessoriesmod
 from . import accounts as accountsmod
 from . import (auction, brief as briefmod, commands, craft, economy, flip,
-               hypixel, llm, mechanics, notify, progress)
+               hypixel, llm, mechanics, notify, onboarding, progress, ui)
 from .bazaar import Market
 from .history import PriceHistory, record_snapshot
 
@@ -36,8 +41,8 @@ DEFAULT_SAMPLE = os.path.join(_ROOT, "data", "sample_bazaar.json")
 
 
 def _add_common(p: argparse.ArgumentParser) -> None:
-    p.add_argument("-a", "--account", default="NullifiedGalaxy",
-                   help="configured account name (default: NullifiedGalaxy)")
+    p.add_argument("-a", "--account", default=None,
+                   help="configured account name (default: your first account)")
     p.add_argument("-b", "--budget", type=float, default=None,
                    help="override capital, in coins")
     p.add_argument("-r", "--risk", choices=list(accountsmod.RISK_PROFILES),
@@ -66,8 +71,18 @@ def _add_common(p: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="nulladdons",
-        description="Null's Addons — Hypixel SkyBlock Bazaar flipping assistant.")
+        description="Null's Addons — Hypixel SkyBlock money-making assistant. "
+                    "New here? Run:  nulladdons setup")
     sub = parser.add_subparsers(dest="command")
+
+    sp_setup = sub.add_parser("setup", help="interactive first-run setup wizard")
+    sp_setup.add_argument("--config", default=None,
+                          help="where to write config (default ~/.nulladdons/accounts.json)")
+
+    sp_doc = sub.add_parser("doctor", help="check your setup (keys, accounts, connectivity)")
+    sp_doc.add_argument("--config", default=None, help="config file to check")
+    sp_doc.add_argument("--quick", action="store_true",
+                        help="skip the live Gemini test call")
 
     for name, help_ in (("plan", "diversified session plan (default)"),
                         ("flips", "ranked order flips"),
@@ -148,11 +163,32 @@ def _load_market(args) -> tuple[Market, PriceHistory | None]:
     return market, history
 
 
+def _resolve_account_name(args, config) -> str:
+    """Pick the account: the one named, or the first configured. Guides to
+    `setup` when there are none / the name is wrong."""
+    names = accountsmod.account_names(config)
+    if not names:
+        print(ui.c("\n  No accounts configured yet.", "yellow", "bold"))
+        print("  Run  " + ui.c("nulladdons setup", "cyan", "bold") +
+              "  to get started (takes ~2 minutes).\n")
+        sys.exit(3)
+    requested = getattr(args, "account", None)
+    if requested is None:
+        return names[0]
+    if requested not in names:
+        print(f"! unknown account '{requested}'. Configured: {', '.join(names)}",
+              file=sys.stderr)
+        print("  Add it with  nulladdons setup", file=sys.stderr)
+        sys.exit(2)
+    return requested
+
+
 def _build_account(args):
     config = accountsmod.load_config()
+    name = _resolve_account_name(args, config)
     risk = "conservative" if args.guaranteed else args.risk
     ctx = accountsmod.build_context(
-        args.account, config, live=args.live, api_key=args.api_key,
+        name, config, live=args.live, api_key=args.api_key,
         budget_override=args.budget, risk_override=risk)
     # CLI overrides on top of the risk profile.
     if args.hold_time is not None:
@@ -468,9 +504,23 @@ def _cmd_brief(args):
               file=sys.stderr)
 
 
+def _cmd_setup(args):
+    onboarding.run_setup(config_path=args.config)
+
+
+def _cmd_doctor(args):
+    cfg = accountsmod.load_config(args.config) if args.config else None
+    healthy = onboarding.doctor(cfg, check_gemini=not args.quick)
+    return 0 if healthy else 1
+
+
 def _cmd_accounts(args):
     config = accountsmod.load_config()
-    print("Configured accounts:\n")
+    if not accountsmod.account_names(config):
+        print("No accounts configured yet. Run  " +
+              ui.c("nulladdons setup", "cyan", "bold") + "  to add one.")
+        return
+    print(f"Configured accounts  (config: {accountsmod.config_path()}):\n")
     for name in config.get("accounts", {}):
         try:
             ctx = accountsmod.build_context(
@@ -486,6 +536,7 @@ def _cmd_accounts(args):
 
 
 _DISPATCH = {
+    "setup": _cmd_setup, "doctor": _cmd_doctor,
     "plan": _cmd_plan, "flips": _cmd_flips, "crafts": _cmd_crafts,
     "item": _cmd_item, "mp": _cmd_mp, "alert": _cmd_alert,
     "ah": _cmd_ah, "brief": _cmd_brief, "status": _cmd_status,
@@ -506,14 +557,17 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
     try:
-        _DISPATCH[args.command](args)
+        result = _DISPATCH[args.command](args)
+    except KeyboardInterrupt:
+        print("\n· cancelled", file=sys.stderr)
+        return 130
     except (KeyError, ValueError) as exc:
         print(f"! {exc}", file=sys.stderr)
         return 2
     except FileNotFoundError as exc:
         print(f"! missing file: {exc}", file=sys.stderr)
         return 2
-    return 0
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":

@@ -64,6 +64,14 @@ def gemini_generate(prompt: str, system: str | None = None,
     return _extract_text(payload)
 
 
+def check_gemini(api_key: str | None, model: str = DEFAULT_MODEL) -> bool:
+    """True if a tiny Gemini call succeeds with this key/model."""
+    if not api_key:
+        return False
+    return gemini_generate("Reply with the single word: OK.", api_key=api_key,
+                           model=model, max_tokens=8, timeout=20) is not None
+
+
 def _extract_text(payload: dict) -> str | None:
     candidates = payload.get("candidates") or []
     if not candidates:

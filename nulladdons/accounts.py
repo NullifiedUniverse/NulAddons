@@ -68,10 +68,33 @@ RISK_PROFILES: dict[str, dict] = {
     ),
 }
 
-DEFAULT_ACCOUNTS_PATH = os.path.join(
+#: The user's own config lives in their home dir so a pip-installed copy or a
+#: fresh clone both work; the repo's config/accounts.json is the bundled example.
+USER_CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".nulladdons")
+USER_CONFIG_PATH = os.path.join(USER_CONFIG_DIR, "accounts.json")
+BUNDLED_CONFIG_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "config", "accounts.json",
 )
+DEFAULT_ACCOUNTS_PATH = BUNDLED_CONFIG_PATH  # backwards-compatible alias
+
+GEMINI_DEFAULT_MODEL = "gemini-2.5-flash"
+
+
+def default_config() -> dict:
+    return {"accounts": {}, "hypixel_api_key": None, "gemini_api_key": None,
+            "gemini_model": GEMINI_DEFAULT_MODEL, "discord_webhook_url": None,
+            "alert": {}}
+
+
+def config_path() -> str:
+    """The active config path: env override → user home → bundled example."""
+    env = os.environ.get("NULLADDONS_CONFIG")
+    if env:
+        return env
+    if os.path.exists(USER_CONFIG_PATH):
+        return USER_CONFIG_PATH
+    return BUNDLED_CONFIG_PATH
 
 
 @dataclass
@@ -110,9 +133,37 @@ class AccountContext:
                 f"budget {int(self.budget):,} coins [{src}]{cookie}")
 
 
-def load_config(path: str = DEFAULT_ACCOUNTS_PATH) -> dict:
-    with open(path, "r", encoding="utf-8") as fh:
-        return json.load(fh)
+def load_config(path: str | None = None) -> dict:
+    """Load config from the active path, or a safe empty default if missing/bad."""
+    p = path or config_path()
+    try:
+        with open(p, "r", encoding="utf-8") as fh:
+            cfg = json.load(fh)
+        return cfg if isinstance(cfg, dict) else default_config()
+    except (OSError, ValueError):
+        return default_config()
+
+
+def save_config(cfg: dict, path: str | None = None) -> str:
+    """Write config to the user's home dir (0600) and return the path used."""
+    p = path or USER_CONFIG_PATH
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w", encoding="utf-8") as fh:
+        json.dump(cfg, fh, indent=2)
+    try:
+        os.chmod(p, 0o600)  # config may hold API keys
+    except OSError:
+        pass
+    return p
+
+
+def account_names(cfg: dict) -> list[str]:
+    return list((cfg.get("accounts") or {}).keys())
+
+
+def first_account(cfg: dict) -> str | None:
+    names = account_names(cfg)
+    return names[0] if names else None
 
 
 def _extract_live_budget(profiles_payload: dict, uuid: str) -> tuple[float | None, dict]:

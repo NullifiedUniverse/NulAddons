@@ -215,6 +215,22 @@ def fetch_player(uuid: str, api_key: str) -> dict | None:
     return payload.get("player") if payload.get("success") else None
 
 
+def check_key(api_key: str | None, uuid: str | None) -> tuple[bool | None, str]:
+    """Validate a Hypixel key. Returns (True/False/None, detail).
+
+    ``None`` means "set, but we couldn't validate without a player uuid"."""
+    if not api_key:
+        return False, "not set"
+    if not uuid:
+        return None, "set (add an account to validate)"
+    try:
+        payload = _get_json(f"{PROFILES_URL}?uuid={uuid}&key={api_key}")
+    except HypixelError as exc:
+        return False, str(exc)
+    return (True, "valid") if payload.get("success") else \
+        (False, payload.get("cause", "invalid"))
+
+
 def fetch_resource(name: str, ttl: float = RESOURCE_TTL,
                    use_cache: bool = True) -> dict | None:
     """Public reference data, e.g. ``skills`` or ``collections`` (no key)."""

@@ -40,8 +40,11 @@ class Recipe:
 
 
 def load_recipes(path: str) -> list[Recipe]:
-    with open(path, "r", encoding="utf-8") as fh:
-        data = json.load(fh)
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return []  # missing/corrupt DB -> just no craft flips, never a crash
     recipes: list[Recipe] = []
     for r in data.get("recipes", []):
         # Skip malformed / example entries rather than crashing the whole app.

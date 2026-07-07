@@ -55,6 +55,15 @@ def post_webhook(url: str, content: str | None = None,
         return False
 
 
+def test_webhook(url: str) -> bool:
+    """Send a friendly connectivity test to a Discord webhook."""
+    return post_webhook(url, embeds=[{
+        "title": "✅ Null's Addons connected",
+        "description": "Your Discord webhook is set up. Crucial alerts and daily "
+                       "briefs will arrive here.",
+        "color": _GREEN, "footer": {"text": "Null's Addons"}}])
+
+
 # --- "crucial" filtering ----------------------------------------------------
 
 def merged_alert(account) -> dict:
