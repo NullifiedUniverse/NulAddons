@@ -1,0 +1,212 @@
+"""
+Null's Addons -- turn analysis into direct, copy-me commands.
+
+The whole promise of the tool is that the player never has to think about market
+theory -- they just read a line and do it.  This module renders sized
+:class:`~nulladdons.flip.FlipPlan` and :class:`~nulladdons.craft.CraftPlan`
+objects into exactly that: "place this buy order, wait N minutes, place this
+sell offer".
+
+It also builds the ``plan`` view: a *diversified portfolio* that spreads the
+account's capital across several uncorrelated opportunities (no single position
+may exceed a set fraction of the bankroll), which is how you convert a pile of
+good-looking edges into a low-variance income stream.
+"""
+
+from __future__ import annotations
+
+from . import craft as craftmod
+from . import flip as flipmod
+from .accounts import AccountContext
+from .bazaar import Market
+from .craft import CraftPlan, Recipe
+from .flip import FlipPlan
+from .history import PriceHistory
+
+# --- number / name formatting ----------------------------------------------
+
+def coins(n: float) -> str:
+    """Human coin formatting: 1_234_567 -> '1.23M'."""
+    n = float(n)
+    sign = "-" if n < 0 else ""
+    n = abs(n)
+    for unit, div in (("B", 1e9), ("M", 1e6), ("k", 1e3)):
+        if n >= div:
+            return f"{sign}{n / div:.2f}{unit}"
+    return f"{sign}{n:,.1f}"
+
+
+def price(n: float) -> str:
+    return f"{n:,.1f}"
+
+
+def minutes(m: float) -> str:
+    if m == float("inf"):
+        return "∞"
+    if m < 1:
+        return f"{m * 60:.0f}s"
+    if m < 60:
+        return f"{m:.1f} min"
+    return f"{m / 60:.1f} h"
+
+
+def nice_name(product_id: str) -> str:
+    """'ENCHANTED_DIAMOND_BLOCK' -> 'Enchanted Diamond Block'."""
+    base = product_id.split(":")[0]
+    return base.replace("_", " ").title()
+
+
+# --- single-opportunity renderers ------------------------------------------
+
+def render_flip(plan: FlipPlan, index: int | None = None) -> str:
+    head = f"FLIP {('#' + str(index)) if index else ''}".rstrip()
+    lines = [
+        f"{head}  ·  {nice_name(plan.product_id)}"
+        f"   [confidence {plan.confidence:.0%} · {coins(plan.coins_per_hour)}/hr]",
+        f"   1. BUY ORDER  {plan.quantity:,} @ {price(plan.buy_order_price)}"
+        f"   → outlay {coins(plan.capital_required)}",
+        f"      wait ~{minutes(plan.buy_minutes)} to fill "
+        f"(you're first in the buy queue)",
+        f"   2. SELL OFFER {plan.quantity:,} @ {price(plan.sell_offer_price)}",
+        f"      wait ~{minutes(plan.sell_minutes)} to fill",
+        f"   ⇒ PROFIT {coins(plan.total_profit)}  (+{plan.margin:.1%} after tax)"
+        f"   ·  round-trip ~{minutes(plan.total_minutes)}  ·  size capped by "
+        f"{plan.binding_constraint}",
+    ]
+    if plan.orders_needed > 1:
+        lines.append(f"      note: split across {plan.orders_needed} orders "
+                     f"(71,680 unit/order cap)")
+    return "\n".join(lines)
+
+
+def render_craft(plan: CraftPlan, index: int | None = None) -> str:
+    head = f"CRAFT {('#' + str(index)) if index else ''}".rstrip()
+    lines = [
+        f"{head}  ·  make {plan.quantity:,} × {nice_name(plan.output_id)}"
+        f"   [confidence {plan.confidence:.0%} · {coins(plan.coins_per_hour)}/hr]",
+    ]
+    step_no = 1
+    for step in plan.steps:
+        if step.action == "buy":
+            lines.append(
+                f"   {step_no}. BUY ORDER {step.quantity:,} × "
+                f"{nice_name(step.item)} @ {price(step.unit_price)}"
+                f"   ({coins(step.quantity * step.unit_price)})")
+        else:
+            src = ", ".join(f"{cnt:,} {nice_name(i)}" for i, cnt in step.from_inputs)
+            lines.append(
+                f"   {step_no}. CRAFT {step.quantity:,} × "
+                f"{nice_name(step.item)}  from  {src}")
+        step_no += 1
+    lines.append(
+        f"   {step_no}. SELL OFFER {plan.quantity:,} × {nice_name(plan.output_id)}"
+        f" @ {price(plan.sell_offer_price)}"
+        f"   (nets {coins(plan.revenue_per_output)}/ea after tax)")
+    guaranteed = (f"  ·  even insta-buy/insta-sell nets +{plan.instant_margin:.1%}"
+                  if plan.instant_unit_profit > 0 else
+                  "  ·  ⚠ only profits with patient orders (not instant)")
+    lines.append(
+        f"   ⇒ PROFIT {coins(plan.total_profit)}  (+{plan.margin:.1%} patient)"
+        f"{guaranteed}")
+    lines.append(
+        f"      outlay {coins(plan.capital_required)}  ·  ~{minutes(plan.total_minutes)}"
+        f"  ·  capped by {plan.binding_constraint}")
+    return "\n".join(lines)
+
+
+# --- portfolio (the `plan` view) -------------------------------------------
+
+MAX_POSITION_FRACTION = 0.34   # diversification: no position > 34% of bankroll
+MAX_SLOTS = 6                  # how many concurrent opportunities to spread over
+MIN_REMAINDER_FRACTION = 0.02  # stop allocating once <2% of budget is left
+
+
+def build_portfolio(account: AccountContext, market: Market,
+                    recipes: list[Recipe], history: PriceHistory | None = None,
+                    include_crafts: bool = True) -> list:
+    """
+    Greedily allocate the account's budget across the top opportunities,
+    diversifying so no single flip/craft dominates.  Returns an ordered list of
+    (FlipPlan | CraftPlan) sized to their allocated slice of capital.
+    """
+    budget = account.budget
+    params = account.params
+
+    # Rank candidates by risk-adjusted score at full budget.
+    flips = flipmod.find_flips(market, params, budget, history, limit=40)
+    crafts = (craftmod.find_crafts(market, recipes, params, budget, history,
+                                   account.allowed_outputs, limit=40)
+              if include_crafts else [])
+    by_output = {r.output: r for r in recipes}
+
+    candidates = sorted(
+        [("flip", p) for p in flips] + [("craft", p) for p in crafts],
+        key=lambda kp: kp[1].score, reverse=True,
+    )
+
+    portfolio: list = []
+    used_keys: set[str] = set()
+    remaining = budget
+    slot_cap = min(MAX_SLOTS, params.max_orders_per_flip * 3 + 3)
+
+    for kind, cand in candidates:
+        if len(portfolio) >= slot_cap or remaining <= budget * MIN_REMAINDER_FRACTION:
+            break
+        key = cand.product_id if kind == "flip" else cand.output_id
+        if key in used_keys:
+            continue
+        alloc = min(remaining, budget * MAX_POSITION_FRACTION)
+
+        if kind == "flip":
+            product = market.get(cand.product_id)
+            sized = flipmod.evaluate(product, params, alloc, history)
+        else:
+            engine = craftmod.CraftEngine(market, recipes, params,
+                                          account.allowed_outputs)
+            sized = engine.evaluate(by_output[cand.output_id], alloc, history)
+
+        if sized is None or sized.capital_required <= 0:
+            continue
+        portfolio.append(sized)
+        used_keys.add(key)
+        remaining -= sized.capital_required
+
+    return portfolio
+
+
+def render_portfolio(account: AccountContext, portfolio: list) -> str:
+    total_profit = sum(p.total_profit for p in portfolio)
+    total_capital = sum(p.capital_required for p in portfolio)
+    total_cph = sum(p.coins_per_hour for p in portfolio)
+    max_time = max((p.total_minutes for p in portfolio), default=0.0)
+
+    out = [
+        "═" * 68,
+        f" NULL'S ADDONS · SESSION PLAN — {account.summary()}",
+        "═" * 68,
+    ]
+    if not portfolio:
+        out.append("No opportunities clear this account's risk floor right now.")
+        out.append("Try a lower-risk-floor profile (e.g. --risk aggressive) or "
+                    "wait for the market to move.")
+        return "\n".join(out)
+
+    for i, plan in enumerate(portfolio, 1):
+        if isinstance(plan, FlipPlan):
+            out.append(render_flip(plan, i))
+        else:
+            out.append(render_craft(plan, i))
+        out.append("")
+
+    out.append("─" * 68)
+    out.append(
+        f" Deploy {coins(total_capital)} of {coins(account.budget)} across "
+        f"{len(portfolio)} positions (diversified, ≤{MAX_POSITION_FRACTION:.0%} each)")
+    out.append(
+        f" Expected profit this cycle: {coins(total_profit)}"
+        f"   ·   combined ~{coins(total_cph)}/hr running in parallel")
+    out.append(
+        f" Longest position fills in ~{minutes(max_time)}. Re-run to re-price as "
+        f"the market moves.")
+    out.append("─" * 68)
+    return "\n".join(out)

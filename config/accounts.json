@@ -1,0 +1,22 @@
+{
+  "_comment": "Per-account settings for Null's Addons. 'budget' is used when running offline / without an API key; pass --live with a Hypixel key to override it with the account's real purse + bank. Set 'cookie_buffed': true if a Booster Cookie is active (lowers Bazaar tax 1.25% -> 1.1%).",
+  "hypixel_api_key": null,
+  "accounts": {
+    "NullifiedGalaxy": {
+      "username": "NullifiedGalaxy",
+      "budget": 50000000,
+      "risk": "balanced",
+      "cookie_buffed": true,
+      "best_case_tax": false,
+      "notes": "Main account. Balanced flipper — good turnover, sensible safety."
+    },
+    "YunUnderTheMoon": {
+      "username": "YunUnderTheMoon",
+      "budget": 8000000,
+      "risk": "conservative",
+      "cookie_buffed": false,
+      "best_case_tax": false,
+      "notes": "Growing account. Conservative — protect the bankroll, only deep liquid flips."
+    }
+  }
+}

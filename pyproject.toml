@@ -1,0 +1,21 @@
+[project]
+name = "nulls-addons"
+version = "1.0.0"
+description = "Hypixel SkyBlock Bazaar-flipping assistant — turns live market data into direct buy/sell commands."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []   # standard library only
+license = { text = "MIT" }
+
+[project.scripts]
+nulls-addons = "nulladdons.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["nulladdons"]
+
+[tool.setuptools.package-data]
+"*" = ["../data/*.json", "../config/*.json"]
