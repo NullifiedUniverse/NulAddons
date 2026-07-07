@@ -1,6 +1,12 @@
 {
-  "_comment": "Per-account settings for Null's Addons. 'budget' is used when running offline / without an API key; pass --live with a Hypixel key to override it with the account's real purse + bank. Set 'cookie_buffed': true if a Booster Cookie is active (lowers Bazaar tax 1.25% -> 1.1%).",
+  "_comment": "Per-account settings for Null's Addons. 'budget' is used offline / without an API key; pass --live with a Hypixel key to override it with the account's real purse + bank (and read your talisman bag for the mp planner). 'cookie_buffed': true lowers Bazaar tax 1.25%->1.1%. 'blacklist'/'whitelist' restrict which products to trade. 'mp_goal' targets Magical Power. 'owned_families' lists accessory families you already have (skipped by the mp planner) when not using --live. 'webhook_url' + 'alert' drive Discord notifications; a top-level 'discord_webhook_url'/'alert' apply to all accounts unless overridden.",
   "hypixel_api_key": null,
+  "discord_webhook_url": null,
+  "alert": {
+    "min_profit": 1000000,
+    "min_coins_per_hour": 5000000,
+    "min_confidence": 0.6
+  },
   "accounts": {
     "NullifiedGalaxy": {
       "username": "NullifiedGalaxy",
@@ -8,6 +14,11 @@
       "risk": "balanced",
       "cookie_buffed": true,
       "best_case_tax": false,
+      "mp_goal": 1500,
+      "owned_families": [],
+      "blacklist": [],
+      "webhook_url": null,
+      "alert": {},
       "notes": "Main account. Balanced flipper — good turnover, sensible safety."
     },
     "YunUnderTheMoon": {
@@ -16,6 +27,11 @@
       "risk": "conservative",
       "cookie_buffed": false,
       "best_case_tax": false,
+      "mp_goal": 750,
+      "owned_families": [],
+      "blacklist": [],
+      "webhook_url": null,
+      "alert": { "min_coins_per_hour": 2000000 },
       "notes": "Growing account. Conservative — protect the bankroll, only deep liquid flips."
     }
   }

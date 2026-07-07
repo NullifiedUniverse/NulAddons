@@ -176,13 +176,15 @@ class CraftEngine:
 
     def _throughput(self, output: Product, shopping_per_output: dict[str, float]):
         cap = self.params.capture_fraction
-        sell_rate = economy.flow_per_min(output.demand_per_week) * cap
+        sell_rate = economy.flow_per_min(output.demand_per_week) * \
+            economy.effective_capture(output, cap, "sell")
         buy_rate = _INF
         for raw_id, per_out in shopping_per_output.items():
             product = self.market.get(raw_id)
             if not product or per_out <= 0:
                 continue
-            rate = economy.flow_per_min(product.supply_per_week) * cap / per_out
+            rate = economy.flow_per_min(product.supply_per_week) * \
+                economy.effective_capture(product, cap, "buy") / per_out
             buy_rate = min(buy_rate, rate)
         return buy_rate, sell_rate
 
@@ -293,11 +295,17 @@ class CraftEngine:
 def find_crafts(market: Market, recipes: list[Recipe], params: EvalParams,
                 budget: float, history: PriceHistory | None = None,
                 allowed_outputs: set[str] | None = None,
-                limit: int | None = None) -> list[CraftPlan]:
+                limit: int | None = None,
+                blacklist: set[str] | None = None,
+                whitelist: set[str] | None = None) -> list[CraftPlan]:
     """Return all qualifying craft flips, best risk-adjusted opportunity first."""
     engine = CraftEngine(market, recipes, params, allowed_outputs)
     plans: list[CraftPlan] = []
     for recipe in recipes:
+        if blacklist and recipe.output in blacklist:
+            continue
+        if whitelist is not None and recipe.output not in whitelist:
+            continue
         # Fresh memo per recipe so top-level "force craft" logic stays correct.
         engine._cost_memo.clear()
         engine._method_memo.clear()

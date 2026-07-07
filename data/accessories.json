@@ -1,0 +1,20 @@
+{
+  "_comment": "Accessory database for Null's Addons' Magical Power planner. Almost no accessories are Bazaar-tradable (verified against the live API), so the two live-priceable levers are: (1) the few Bazaar accessories below, and (2) the Recombobulator 3000 (computed in-engine from its live price, applied to accessories you already own). Entries WITH an 'acquire' block are priced and ranked in the buy/craft list; entries WITHOUT one are still used to identify owned accessories and to suggest specific Recombobulator upgrades. Add your own: give an id, family, rarity, and either {\"bazaar\": \"<PRODUCT_ID>\"}, {\"craft\": [[\"<MAT_ID>\", qty], ...]} (priced from live Bazaar mats), or {\"npc\": <coins>}. Every id is validated live; a bad one is skipped.",
+  "_magical_power_by_rarity": {"COMMON": 3, "UNCOMMON": 5, "RARE": 8, "EPIC": 12, "LEGENDARY": 16, "MYTHIC": 22},
+  "_example_craft_entry": {"id": "MY_TALISMAN", "name": "My Talisman", "family": "example", "rarity": "COMMON", "acquire": {"craft": [["ENCHANTED_STRING", 20]]}},
+  "accessories": [
+    {"id": "NECROMANCER_BROOCH", "name": "Necromancer's Brooch", "family": "necromancer_brooch", "rarity": "LEGENDARY", "acquire": {"bazaar": "NECROMANCER_BROOCH"}},
+    {"id": "SADAN_BROOCH", "name": "Sadan's Brooch", "family": "sadan_brooch", "rarity": "LEGENDARY", "acquire": {"bazaar": "SADAN_BROOCH"}},
+
+    {"id": "TITANIUM_TALISMAN", "name": "Titanium Talisman", "family": "titanium", "rarity": "UNCOMMON"},
+    {"id": "TITANIUM_RING", "name": "Titanium Ring", "family": "titanium", "rarity": "RARE"},
+    {"id": "TITANIUM_ARTIFACT", "name": "Titanium Artifact", "family": "titanium", "rarity": "EPIC"},
+    {"id": "TITANIUM_RELIC", "name": "Titanium Relic", "family": "titanium", "rarity": "LEGENDARY"},
+
+    {"id": "BAT_PERSON_ARTIFACT", "name": "Bat Person Artifact", "family": "bat_person", "rarity": "LEGENDARY"},
+    {"id": "WOLF_TALISMAN", "name": "Wolf Talisman", "family": "wolf", "rarity": "COMMON"},
+    {"id": "WOLF_RING", "name": "Wolf Ring", "family": "wolf", "rarity": "RARE"},
+    {"id": "TREASURE_TALISMAN", "name": "Treasure Talisman", "family": "treasure", "rarity": "UNCOMMON"},
+    {"id": "TREASURE_ARTIFACT", "name": "Treasure Artifact", "family": "treasure", "rarity": "EPIC"}
+  ]
+}

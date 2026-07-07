@@ -20,14 +20,17 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 
+from . import accessories as accessoriesmod
 from . import accounts as accountsmod
-from . import commands, craft, economy, flip, hypixel, mechanics
+from . import commands, craft, economy, flip, hypixel, mechanics, notify
 from .bazaar import Market
 from .history import PriceHistory, record_snapshot
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_RECIPES = os.path.join(_ROOT, "data", "recipes.json")
+DEFAULT_ACCESSORIES = os.path.join(_ROOT, "data", "accessories.json")
 DEFAULT_SAMPLE = os.path.join(_ROOT, "data", "sample_bazaar.json")
 
 
@@ -49,6 +52,8 @@ def _add_common(p: argparse.ArgumentParser) -> None:
                    help="enrich account from the live Hypixel profile (needs key)")
     p.add_argument("--api-key", default=os.environ.get("HYPIXEL_API_KEY"),
                    help="Hypixel API key (or set HYPIXEL_API_KEY)")
+    p.add_argument("--webhook", default=None,
+                   help="Discord webhook URL to post to (overrides config)")
     p.add_argument("--offline", nargs="?", const=DEFAULT_SAMPLE, default=None,
                    help="use a saved bazaar snapshot instead of the network")
     p.add_argument("--recipes", default=DEFAULT_RECIPES,
@@ -73,25 +78,48 @@ def build_parser() -> argparse.ArgumentParser:
     ip = sub.add_parser("item", help="deep dive on one product id")
     ip.add_argument("product_id")
     _add_common(ip)
+
+    mp = sub.add_parser("mp", help="cheapest Magical Power (accessories/recomb)")
+    _add_common(mp)
+    mp.add_argument("--mp-goal", type=int, default=None,
+                    help="target Magical Power to reach")
+    mp.add_argument("--accessories", default=DEFAULT_ACCESSORIES,
+                    help="path to the accessory database")
+
+    al = sub.add_parser("alert", help="post crucial opportunities to Discord")
+    _add_common(al)
+    al.add_argument("--watch", type=float, default=None, metavar="MINUTES",
+                    help="re-check every MINUTES and post only new opportunities")
     return parser
 
 
 def _load_market(args) -> tuple[Market, PriceHistory | None]:
-    offline = args.offline
-    if offline and not os.path.exists(offline):
-        print(f"! offline snapshot not found: {offline}", file=sys.stderr)
-        sys.exit(2)
-    try:
-        payload = hypixel.fetch_bazaar(offline_path=offline)
-    except hypixel.HypixelError as exc:
-        print(f"! could not fetch bazaar: {exc}", file=sys.stderr)
-        if os.path.exists(DEFAULT_SAMPLE):
-            print(f"  falling back to bundled snapshot ({DEFAULT_SAMPLE})",
-                  file=sys.stderr)
-            payload = hypixel.fetch_bazaar(offline_path=DEFAULT_SAMPLE)
-        else:
+    offline = getattr(args, "offline", None)
+    if offline:
+        # Explicit offline mode: use a snapshot, but never silently.
+        if not os.path.exists(offline):
+            print(f"! offline snapshot not found: {offline}", file=sys.stderr)
             sys.exit(2)
-    market = Market.from_api(payload)
+        payload = hypixel.fetch_bazaar(offline_path=offline)
+        market = Market.from_api(payload)
+        print(f"⚠ OFFLINE MODE — snapshot {os.path.basename(offline)}; prices "
+              f"are NOT live. Drop --offline for real trading.", file=sys.stderr)
+    else:
+        # Live is mandatory for real trading. Fail loudly rather than trade on
+        # stale data.
+        try:
+            payload = hypixel.fetch_bazaar()
+        except hypixel.HypixelError as exc:
+            print(f"! live Bazaar fetch failed: {exc}", file=sys.stderr)
+            print("  check your connection, or pass --offline to demo on the "
+                  "bundled snapshot (not for real trades).", file=sys.stderr)
+            sys.exit(2)
+        market = Market.from_api(payload)
+        age = market.age_seconds()
+        age_txt = f"{age:.0f}s ago" if age is not None else "unknown"
+        note = "  ⚠ STALE" if market.is_stale() else ""
+        print(f"· live Bazaar — updated {age_txt}, {len(market)} products{note}",
+              file=sys.stderr)
 
     history = None
     if not args.no_history:
@@ -125,12 +153,18 @@ def _cmd_plan(args):
     recipes = craft.load_recipes(args.recipes)
     portfolio = commands.build_portfolio(ctx, market, recipes, history)
     print(commands.render_portfolio(ctx, portfolio))
+    if args.webhook and portfolio:
+        ok = notify.post_webhook(
+            args.webhook, embeds=[notify.plan_summary_embed(ctx, portfolio)])
+        print(f"· plan {'posted to' if ok else 'FAILED to post to'} Discord",
+              file=sys.stderr)
 
 
 def _cmd_flips(args):
     market, history = _load_market(args)
     ctx, _ = _build_account(args)
-    plans = flip.find_flips(market, ctx.params, ctx.budget, history, limit=args.top)
+    plans = flip.find_flips(market, ctx.params, ctx.budget, history, limit=args.top,
+                            blacklist=ctx.blacklist, whitelist=ctx.whitelist)
     print(f"Top {len(plans)} order flips — {ctx.summary()}\n")
     if not plans:
         print("No flips clear this risk floor. Try --risk aggressive.")
@@ -145,7 +179,8 @@ def _cmd_crafts(args):
     ctx, _ = _build_account(args)
     recipes = craft.load_recipes(args.recipes)
     plans = craft.find_crafts(market, recipes, ctx.params, ctx.budget, history,
-                              ctx.allowed_outputs, limit=args.top)
+                              ctx.allowed_outputs, limit=args.top,
+                              blacklist=ctx.blacklist, whitelist=ctx.whitelist)
     print(f"Top {len(plans)} craft flips — {ctx.summary()}\n")
     if not plans:
         print("No craft flips clear this risk floor right now.")
@@ -195,6 +230,74 @@ def _cmd_item(args):
               + (f", z-score {z:+.2f}" if z is not None else ""))
 
 
+def _cmd_mp(args):
+    market, history = _load_market(args)
+    ctx, _ = _build_account(args)
+    accs = accessoriesmod.load_accessories(args.accessories)
+    recipes = craft.load_recipes(args.recipes)
+    engine = accessoriesmod.AccessoryEngine(market, accs, recipes)
+
+    # Owned families = configured families + those inferred from the live bag.
+    id_to_family = {a.id: a.family for a in accs}
+    owned_families = set(ctx.owned_families) | {
+        id_to_family[i] for i in ctx.owned_item_ids if i in id_to_family}
+
+    goal = args.mp_goal if args.mp_goal is not None else ctx.mp_goal
+    mp_budget = args.budget  # optional cap on MP spend
+    plan = accessoriesmod.plan_magic_power(
+        engine, accs, ctx.owned_item_ids, owned_families,
+        mp_goal=goal, budget=mp_budget, top=args.top)
+    # Reflect the goal in the header even if it came from the flag.
+    ctx.mp_goal = goal or ctx.mp_goal
+    print(commands.render_mp_plan(ctx, plan))
+
+
+def _run_alert_cycle(args, ctx, webhook, seen: set) -> None:
+    market, history = _load_market(args)
+    recipes = craft.load_recipes(args.recipes)
+    alert = notify.merged_alert(ctx)
+    flips = flip.find_flips(market, ctx.params, ctx.budget, history, limit=25,
+                            blacklist=ctx.blacklist, whitelist=ctx.whitelist)
+    crafts = craft.find_crafts(market, recipes, ctx.params, ctx.budget, history,
+                               ctx.allowed_outputs, limit=25,
+                               blacklist=ctx.blacklist, whitelist=ctx.whitelist)
+    new_f = [p for p in notify.crucial(flips, alert)
+             if notify.opportunity_key(p) not in seen]
+    new_c = [p for p in notify.crucial(crafts, alert)
+             if notify.opportunity_key(p) not in seen]
+    if not new_f and not new_c:
+        print("· no new crucial opportunities", file=sys.stderr)
+        return
+    for p in new_f + new_c:
+        seen.add(notify.opportunity_key(p))
+    embed = notify.opportunities_embed(ctx, new_f, new_c, market.age_seconds())
+    ok = notify.post_webhook(webhook, embeds=[embed])
+    count = len(new_f) + len(new_c)
+    print(f"· {'posted' if ok else 'FAILED to post'} {count} new opportunit"
+          f"{'y' if count == 1 else 'ies'} to Discord", file=sys.stderr)
+
+
+def _cmd_alert(args):
+    ctx, _ = _build_account(args)
+    webhook = args.webhook or ctx.webhook_url
+    if not webhook:
+        print("! no Discord webhook configured. Pass --webhook <url> or set "
+              "'discord_webhook_url' (or per-account 'webhook_url') in "
+              "config/accounts.json.", file=sys.stderr)
+        sys.exit(2)
+    seen: set = set()
+    _run_alert_cycle(args, ctx, webhook, seen)
+    if args.watch:
+        print(f"· watching every {args.watch:g} min (Ctrl-C to stop)",
+              file=sys.stderr)
+        try:
+            while True:
+                time.sleep(max(1.0, args.watch) * 60)
+                _run_alert_cycle(args, ctx, webhook, seen)
+        except KeyboardInterrupt:
+            print("\n· stopped watching", file=sys.stderr)
+
+
 def _cmd_accounts(args):
     config = accountsmod.load_config()
     print("Configured accounts:\n")
@@ -214,7 +317,8 @@ def _cmd_accounts(args):
 
 _DISPATCH = {
     "plan": _cmd_plan, "flips": _cmd_flips, "crafts": _cmd_crafts,
-    "item": _cmd_item, "accounts": _cmd_accounts,
+    "item": _cmd_item, "mp": _cmd_mp, "alert": _cmd_alert,
+    "accounts": _cmd_accounts,
 }
 
 

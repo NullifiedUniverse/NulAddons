@@ -25,7 +25,7 @@ import json
 import os
 from dataclasses import dataclass, field
 
-from . import hypixel, mechanics
+from . import hypixel, mechanics, nbt
 from .economy import EvalParams
 
 # Each profile is a set of overrides applied on top of EvalParams' defaults.
@@ -75,6 +75,17 @@ class AccountContext:
     live: bool = False                 # True if enriched from the live profile
     collections: dict[str, int] = field(default_factory=dict)
     allowed_outputs: set[str] | None = None  # None => all craft recipes allowed
+    # Trading preferences
+    blacklist: set[str] = field(default_factory=set)   # ids never to trade
+    whitelist: set[str] | None = None                  # if set, only these ids
+    # Progression
+    mp_goal: int = 0                                   # target Magical Power
+    owned_families: set[str] = field(default_factory=set)   # accessory families owned
+    owned_item_ids: set[str] = field(default_factory=set)   # from live talisman bag
+    current_mp: int | None = None                      # from live talisman bag, if read
+    # Notifications
+    webhook_url: str | None = None
+    alert: dict = field(default_factory=dict)          # crucial-message thresholds
 
     def summary(self) -> str:
         src = "live profile" if self.live else "config"
@@ -111,6 +122,34 @@ def _extract_live_budget(profiles_payload: dict, uuid: str) -> tuple[float | Non
     return best_budget, collections
 
 
+def _extract_owned_ids(profiles_payload: dict, uuid: str) -> set[str]:
+    """Decode the player's talisman/accessory bag into a set of item ids.
+
+    Best-effort: needs the player's inventory API enabled; returns an empty set
+    on any problem, in which case the planner falls back to configured owned
+    families."""
+    profiles = profiles_payload.get("profiles") or []
+    chosen = None
+    for profile in profiles:
+        member = (profile.get("members") or {}).get(uuid) or {}
+        if chosen is None:
+            chosen = member
+        if profile.get("selected"):
+            chosen = member
+            break
+    if not chosen:
+        return set()
+    # Newer API nests bags under inventory.bag_contents; older is top-level.
+    bag = None
+    inv = chosen.get("inventory") or {}
+    bag_contents = inv.get("bag_contents") or {}
+    for key in ("talisman_bag",):
+        bag = bag_contents.get(key) or chosen.get(key)
+        if bag:
+            break
+    return nbt.item_ids_from_bag(bag) if bag else set()
+
+
 def build_context(name: str, config: dict, *, live: bool = False,
                   api_key: str | None = None,
                   budget_override: float | None = None,
@@ -133,6 +172,7 @@ def build_context(name: str, config: dict, *, live: bool = False,
     budget = float(acc.get("budget", 0))
     uuid = None
     collections: dict[str, int] = {}
+    owned_ids: set[str] = set()
     is_live = False
 
     if live:
@@ -142,6 +182,7 @@ def build_context(name: str, config: dict, *, live: bool = False,
             payload = hypixel.fetch_profiles(uuid, key)
             if payload:
                 live_budget, collections = _extract_live_budget(payload, uuid)
+                owned_ids = _extract_owned_ids(payload, uuid)
                 if live_budget is not None:
                     budget = live_budget
                     is_live = True
@@ -151,9 +192,21 @@ def build_context(name: str, config: dict, *, live: bool = False,
 
     params = EvalParams(tax=tax, **RISK_PROFILES[risk])
 
+    # Notifications: per-account webhook falls back to a global one.
+    webhook = acc.get("webhook_url") or config.get("discord_webhook_url")
+    alert = dict(config.get("alert", {}))       # global defaults ...
+    alert.update(acc.get("alert", {}))          # ... overridden per account
+
     return AccountContext(
         name=name, username=username, budget=budget, risk=risk, params=params,
         uuid=uuid, notes=acc.get("notes", ""), cookie_buffed=cookie,
         live=is_live, collections=collections,
         allowed_outputs=None,  # unlock-gating is opt-in; see README
+        blacklist=set(acc.get("blacklist", [])),
+        whitelist=set(acc["whitelist"]) if acc.get("whitelist") else None,
+        mp_goal=int(acc.get("mp_goal", 0)),
+        owned_families=set(acc.get("owned_families", [])),
+        owned_item_ids=owned_ids,
+        webhook_url=webhook,
+        alert=alert,
     )

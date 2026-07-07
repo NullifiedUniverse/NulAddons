@@ -46,19 +46,30 @@ No dependencies — just Python 3.9+ and an internet connection.
 python3 -m nulladdons plan                 # the headline: a full session plan
 python3 -m nulladdons flips --top 10       # ranked order flips
 python3 -m nulladdons crafts               # ranked craft flips
+python3 -m nulladdons mp                    # cheapest Magical Power to buy/craft/recomb
 python3 -m nulladdons item ENCHANTED_LAPIS_LAZULI   # deep dive on one product
 python3 -m nulladdons accounts             # your configured accounts
 
 # personalise
 python3 -m nulladdons plan -a YunUnderTheMoon
 python3 -m nulladdons plan -a NullifiedGalaxy --budget 120000000 --risk aggressive
+python3 -m nulladdons mp -a NullifiedGalaxy --live --mp-goal 2000   # uses your real bag
 
 # "guarantee profit" mode — strict, near‑risk‑free filters
 python3 -m nulladdons plan --guaranteed
 
-# no internet? run against the bundled market snapshot
+# push crucial opportunities to Discord (optionally watch on a loop)
+python3 -m nulladdons alert --webhook https://discord.com/api/webhooks/...
+python3 -m nulladdons alert --watch 10     # re-check every 10 min, post only what's new
+
+# no internet? run against the bundled market snapshot (never for real trades)
 python3 -m nulladdons plan --offline
 ```
+
+**Bazaar data is always live.** Every command fetches the Hypixel Bazaar in real
+time (cached ~60s) and prints how old the snapshot is; if the fetch fails it
+errors out rather than trade on stale numbers. `--offline` is an explicit,
+loudly‑flagged demo mode only.
 
 Optional install for a shorter command:
 
@@ -214,6 +225,54 @@ Add your own recipes by appending to `data/recipes.json`:
 
 ---
 
+## Magical Power planner (`mp`)
+
+Magical Power (MP) scales your Accessory Bag, and every accessory grants MP purely
+by **rarity** (Common 3 · Uncommon 5 · Rare 8 · Epic 12 · Legendary 16 · Mythic
+22).  So "more MP, cheap and fast" is an optimisation over **coins per MP**, and
+the planner ranks every lever it can price from the live Bazaar:
+
+* **Buy / craft** accessories you don't own — a Bazaar accessory, or one crafted
+  from Bazaar mats (priced through the same recursive recipe engine as craft
+  flips).  Ranked cheapest coins/MP first, one entry per accessory family, skipping
+  what you already own.
+* **Recombobulate** accessories you *do* own — a Recombobulator 3000 bumps an
+  accessory one rarity (+MP).  Its price comes straight from the Bazaar, so
+  coins/MP = recomb price ÷ MP gained.  The planner shows the best‑value tiers
+  (e.g. Legendary→Mythic is +6 MP).
+
+**Reality check:** almost no accessories are Bazaar‑tradable (verified against the
+live API — 0 of 58 common ones), so the Recombobulator is the main live‑priced
+lever, plus the handful of Bazaar accessories.  The accessory database
+(`data/accessories.json`) is the extensible part: add any accessory with a
+`bazaar`, `craft`, or `npc` cost and it's priced and ranked automatically. Unlike a
+bad *flip* recipe, a slightly‑off *accessory* recipe only mis‑estimates a shopping
+cost — you still get the real MP — and every id is still validated live.
+
+**Personalised:** with `--live` and an API key, the planner decodes your talisman
+bag (a minimal built‑in NBT reader) to skip accessories you already own and to
+target `mp_goal`.  Without a key it uses `owned_families` from config.
+
+## Discord alerts (`alert`)
+
+Get pinged only when it matters.  `alert` posts **crucial** opportunities to a
+Discord webhook — a rare high‑value flip, a guaranteed craft, a great MP deal —
+where "crucial" is defined per account by thresholds:
+
+```json
+"alert": { "min_profit": 1000000, "min_coins_per_hour": 5000000, "min_confidence": 0.6 }
+```
+
+```bash
+python3 -m nulladdons alert --webhook https://discord.com/api/webhooks/xxx/yyy
+python3 -m nulladdons alert --watch 10      # loop: re-check every 10 min, only post NEW ones
+python3 -m nulladdons plan  --webhook ...    # also posts the session-plan summary
+```
+
+Set the webhook once in `config/accounts.json` (`discord_webhook_url` globally, or
+`webhook_url` per account) and drop the flag.  The watch loop de‑dupes so you're
+never spammed with the same flip twice.
+
 ## Command reference
 
 | Command | Does |
@@ -221,12 +280,21 @@ Add your own recipes by appending to `data/recipes.json`:
 | `plan` | Diversified, budgeted set of orders to place now (default). |
 | `flips` | Ranked order flips. |
 | `crafts` | Ranked craft flips. |
+| `mp` | Cheapest Magical Power: accessories to buy/craft + Recombobulator upgrades. |
 | `item <ID>` | Deep dive: book, spread, liquidity, flip economics, confidence breakdown. |
+| `alert` | Post crucial opportunities to Discord (optionally `--watch`). |
 | `accounts` | List configured accounts (with live capital if `--live`). |
 
 Common flags: `-a/--account`, `-b/--budget`, `-r/--risk`, `--hold-time`,
-`--min-margin`, `--top`, `--guaranteed`, `--live`, `--api-key`, `--offline`,
-`--no-history`.
+`--min-margin`, `--top`, `--guaranteed`, `--live`, `--api-key`, `--webhook`,
+`--offline`, `--no-history`.  Plus `--mp-goal` (mp) and `--watch` (alert).
+
+### Per‑account config (`config/accounts.json`)
+
+`budget`, `risk`, `cookie_buffed`, `notes`, plus: `mp_goal`, `owned_families`,
+`blacklist`/`whitelist` (product ids to force‑skip or restrict to), `webhook_url`
+and `alert` thresholds.  A top‑level `discord_webhook_url` and `alert` apply to all
+accounts unless overridden.
 
 ---
 
@@ -235,22 +303,34 @@ Common flags: `-a/--account`, `-b/--budget`, `-r/--risk`, `--hold-time`,
 ```
 nulladdons/
   mechanics.py   Game constants & pure flip math (tax, undercut, order caps)
-  bazaar.py      Product/Market model — disambiguates the Hypixel API fields
+  bazaar.py      Product/Market model — disambiguates the Hypixel API fields; data age
   hypixel.py     Zero-dependency API client (bazaar, Mojang UUID, profiles)
   history.py     Local price-history log for volatility & mean reversion
-  economy.py     The theory: fill time, sizing, confidence, coins/hour
-  flip.py        Order-flip finder
+  economy.py     The theory: congestion-aware fill time, sizing, confidence, coins/hour
+  flip.py        Order-flip finder (+ blacklist/whitelist)
   craft.py       Craft-flip finder (recursive cheapest-acquisition arbitrage)
+  accessories.py Magical Power planner (coins/MP, Recombobulator lever)
+  nbt.py         Minimal NBT reader — decodes the live talisman bag for personalisation
   accounts.py    Per-account personalisation & risk profiles
   commands.py    Renders plans into direct commands + the diversified portfolio
+  notify.py      Discord webhook notifier for crucial messages
   cli.py         Command-line interface
-config/accounts.json     Account settings
+config/accounts.json     Account settings (budget, risk, blacklist, mp_goal, webhook…)
 data/recipes.json        Craft recipe database
+data/accessories.json    Accessory / Magical-Power database
 data/sample_bazaar.json  Bundled snapshot for --offline / demos
-tests/test_core.py       Unit tests (no network)
+tests/                    Unit tests (no network): test_core.py, test_features.py
 ```
 
-Run the tests with `python3 -m unittest discover -s tests`.
+Run the tests with `python3 -m unittest discover -s tests` (29 tests).
+
+### Refined fill model
+
+Fill times are congestion‑aware: a big stack of orders already resting on your
+side of the book signals an undercut war, so the model measures *days of backlog*
+(resting same‑side volume ÷ daily instant‑flow) and fades how much of the flow your
+order actually wins.  A calm book fills near the naive estimate; a congested one
+takes realistically longer — which flows straight through to position sizing.
 
 ---
 

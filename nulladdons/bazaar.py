@@ -25,6 +25,7 @@ We expose these as ``best_ask`` / ``best_bid`` and ``demand_per_week`` /
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 from . import mechanics
@@ -134,7 +135,18 @@ class Market:
 
     def __init__(self, products: dict[str, Product], last_updated: int | None = None):
         self.products = products
-        self.last_updated = last_updated
+        self.last_updated = last_updated  # epoch millis from the API
+
+    def age_seconds(self) -> float | None:
+        """How old the snapshot is, in seconds (``None`` if unknown)."""
+        if not self.last_updated:
+            return None
+        return max(0.0, time.time() - self.last_updated / 1000.0)
+
+    def is_stale(self, max_age: float = 300.0) -> bool:
+        """True if the data is older than ``max_age`` seconds (default 5 min)."""
+        age = self.age_seconds()
+        return age is not None and age > max_age
 
     def __contains__(self, pid: str) -> bool:
         return pid in self.products

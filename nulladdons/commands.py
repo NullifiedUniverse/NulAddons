@@ -114,6 +114,46 @@ def render_craft(plan: CraftPlan, index: int | None = None) -> str:
     return "\n".join(lines)
 
 
+# --- magical power plan -----------------------------------------------------
+
+def render_mp_plan(account: AccountContext, plan: dict) -> str:
+    out = [
+        "═" * 68,
+        f" NULL'S ADDONS · MAGICAL POWER PLAN — {account.name} ({account.username})",
+        "═" * 68,
+    ]
+    detail = f"owned accessories detected: {plan['owned_count']}"
+    if not account.live:
+        detail += "  (run --live to read your talisman bag)"
+    if account.mp_goal:
+        detail += f"   ·   goal: {account.mp_goal} MP"
+    out.append(" " + detail)
+    out.append("")
+
+    if plan["picks"]:
+        out.append(" BUY / CRAFT — cheapest Magical Power you don't own yet:")
+        for i, b in enumerate(plan["picks"], 1):
+            out.append(f"  {i}. +{b.mp_gain} MP  ·  {b.label}  ·  {coins(b.cost)}"
+                       f"  ({coins(b.coins_per_mp)}/MP)")
+            out.append(f"        → {b.how}")
+        out.append(f"   ⇒ +{plan['mp_gained']} MP for {coins(plan['coins_spent'])} total")
+    else:
+        out.append(" BUY / CRAFT: no Bazaar-priceable accessories match right now.")
+        out.append("   Most cheap MP comes from talisman crafts specific to your")
+        out.append("   collections — add their recipes to data/accessories.json and")
+        out.append("   they'll be priced and ranked here automatically.")
+    out.append("")
+
+    if plan["recombs"]:
+        out.append(" RECOMBOBULATOR 3000 — bump an accessory's rarity for more MP")
+        out.append(" (cheapest coins/MP first; buy the recomb on the Bazaar):")
+        for i, b in enumerate(plan["recombs"], 1):
+            out.append(f"  {i}. +{b.mp_gain} MP  ·  {b.label}  ·  {coins(b.cost)}"
+                       f"  ({coins(b.coins_per_mp)}/MP)")
+    out.append("═" * 68)
+    return "\n".join(out)
+
+
 # --- portfolio (the `plan` view) -------------------------------------------
 
 MAX_POSITION_FRACTION = 0.34   # diversification: no position > 34% of bankroll
@@ -133,9 +173,13 @@ def build_portfolio(account: AccountContext, market: Market,
     params = account.params
 
     # Rank candidates by risk-adjusted score at full budget.
-    flips = flipmod.find_flips(market, params, budget, history, limit=40)
+    flips = flipmod.find_flips(market, params, budget, history, limit=40,
+                               blacklist=account.blacklist,
+                               whitelist=account.whitelist)
     crafts = (craftmod.find_crafts(market, recipes, params, budget, history,
-                                   account.allowed_outputs, limit=40)
+                                   account.allowed_outputs, limit=40,
+                                   blacklist=account.blacklist,
+                                   whitelist=account.whitelist)
               if include_crafts else [])
     by_output = {r.output: r for r in recipes}
 

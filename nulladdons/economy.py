@@ -65,6 +65,36 @@ def flow_per_min(weekly_units: int) -> float:
     return weekly_units / mechanics.WEEK_MINUTES
 
 
+def effective_capture(product: Product, base_capture: float, side: str) -> float:
+    """
+    Shrink the capture fraction when the order book is congested.
+
+    A big stack of orders already resting on your side means an undercut war:
+    lots of rivals will jump in front of you, so you win a smaller slice of the
+    incoming instant-flow and fill slower.  We measure congestion as *days of
+    backlog* -- resting same-side volume divided by the daily flow feeding it --
+    and fade capture accordingly.  This is what turns a naive "weekly volume"
+    estimate into a realistic fill time.
+    """
+    if side == "buy":       # your buy order competes with resting buy orders
+        resting, weekly_flow = product.bid_volume, product.supply_per_week
+    else:                    # your sell offer competes with resting sell offers
+        resting, weekly_flow = product.ask_volume, product.demand_per_week
+    daily_flow = weekly_flow / 7.0
+    if daily_flow <= 0:
+        return 0.0
+    backlog_days = resting / daily_flow
+    return base_capture / (1.0 + 0.5 * backlog_days)
+
+
+def _leg_rates(product: Product, base_capture: float) -> tuple[float, float]:
+    supply_rate = flow_per_min(product.supply_per_week) * \
+        effective_capture(product, base_capture, "buy")
+    demand_rate = flow_per_min(product.demand_per_week) * \
+        effective_capture(product, base_capture, "sell")
+    return supply_rate, demand_rate
+
+
 def fill_minutes(product: Product, quantity: float, capture: float) -> dict:
     """
     Estimate how long each leg of a flip takes.
@@ -74,12 +104,10 @@ def fill_minutes(product: Product, quantity: float, capture: float) -> dict:
     * Your **sell offer** fills from other players' *instant buys* -> it drains
       the weekly **demand** flow.
 
-    ``capture`` is the fraction of that flow your front-of-queue order actually
-    wins (you share it with rival flippers).  Returns per-leg and total minutes;
-    ``inf`` if a side has no flow at all.
+    Rates are congestion-adjusted (see :func:`effective_capture`).  Returns
+    per-leg and total minutes; ``inf`` if a side has no flow at all.
     """
-    supply_rate = flow_per_min(product.supply_per_week) * capture
-    demand_rate = flow_per_min(product.demand_per_week) * capture
+    supply_rate, demand_rate = _leg_rates(product, capture)
     buy_leg = quantity / supply_rate if supply_rate > 0 else math.inf
     sell_leg = quantity / demand_rate if demand_rate > 0 else math.inf
     return {"buy_minutes": buy_leg, "sell_minutes": sell_leg,
@@ -88,8 +116,7 @@ def fill_minutes(product: Product, quantity: float, capture: float) -> dict:
 
 def max_quantity_for_time(product: Product, minutes: float, capture: float) -> float:
     """Largest position whose full round-trip is expected to fill within ``minutes``."""
-    supply_rate = flow_per_min(product.supply_per_week) * capture
-    demand_rate = flow_per_min(product.demand_per_week) * capture
+    supply_rate, demand_rate = _leg_rates(product, capture)
     if supply_rate <= 0 or demand_rate <= 0:
         return 0.0
     minutes_per_unit = (1.0 / supply_rate) + (1.0 / demand_rate)

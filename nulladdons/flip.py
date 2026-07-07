@@ -111,10 +111,19 @@ def evaluate(product: Product, params: EvalParams, budget: float,
 
 def find_flips(market: Market, params: EvalParams, budget: float,
                history: PriceHistory | None = None,
-               limit: int | None = None) -> list[FlipPlan]:
-    """Return all qualifying flips, best risk-adjusted opportunity first."""
+               limit: int | None = None,
+               blacklist: set[str] | None = None,
+               whitelist: set[str] | None = None) -> list[FlipPlan]:
+    """Return all qualifying flips, best risk-adjusted opportunity first.
+
+    ``blacklist`` skips product ids the account never wants to touch;
+    ``whitelist`` (if given) restricts to only those ids."""
     plans: list[FlipPlan] = []
     for product in market.flippable():
+        if blacklist and product.product_id in blacklist:
+            continue
+        if whitelist is not None and product.product_id not in whitelist:
+            continue
         plan = evaluate(product, params, budget, history)
         if plan is not None:
             plans.append(plan)
