@@ -30,12 +30,20 @@ import time
 import urllib.error
 import urllib.request
 
-BAZAAR_URL = "https://api.hypixel.net/v2/skyblock/bazaar"
-PROFILES_URL = "https://api.hypixel.net/v2/skyblock/profiles"
+API = "https://api.hypixel.net/v2"
+BAZAAR_URL = f"{API}/skyblock/bazaar"
+PROFILES_URL = f"{API}/skyblock/profiles"
+AUCTIONS_URL = f"{API}/skyblock/auctions"
+AUCTIONS_ENDED_URL = f"{API}/skyblock/auctions_ended"
+PLAYER_AUCTION_URL = f"{API}/skyblock/auction"
+PLAYER_URL = f"{API}/player"
+RESOURCE_URL = f"{API}/resources/skyblock"
 MOJANG_URL = "https://api.mojang.com/users/profiles/minecraft/"
 
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".nulladdons", "cache")
 DEFAULT_BAZAAR_TTL = 60  # seconds; the API itself refreshes about this often
+ENDED_TTL = 45           # auctions_ended refreshes ~every minute
+RESOURCE_TTL = 24 * 3600  # skill/collection tables barely change
 UUID_TTL = 7 * 24 * 3600  # names rarely change
 
 
@@ -157,3 +165,69 @@ def fetch_profiles(uuid: str, api_key: str) -> dict | None:
     except HypixelError:
         return None
     return payload if payload.get("success") else None
+
+
+def fetch_auctions_ended(ttl: float = ENDED_TTL, use_cache: bool = True) -> list[dict]:
+    """Recently sold auctions (public, no key). ~2 min rolling window."""
+    if use_cache:
+        cached = _read_cache("auctions_ended.json", ttl)
+        if cached is not None:
+            return cached.get("auctions", [])
+    payload = _get_json(AUCTIONS_ENDED_URL)
+    if payload.get("success"):
+        _write_cache("auctions_ended.json", payload)
+    return payload.get("auctions", [])
+
+
+def fetch_auctions_page(page: int = 0, ttl: float = ENDED_TTL,
+                        use_cache: bool = True) -> dict:
+    """One page (~1000) of active auctions (public). ``totalPages`` says how many."""
+    name = f"auctions_p{page}.json"
+    if use_cache:
+        cached = _read_cache(name, ttl)
+        if cached is not None:
+            return cached
+    payload = _get_json(f"{AUCTIONS_URL}?page={page}")
+    if payload.get("success"):
+        _write_cache(name, payload)
+    return payload
+
+
+def fetch_player_auctions(uuid: str, api_key: str) -> list[dict]:
+    """A specific player's own auctions (needs key). Empty list on failure."""
+    if not api_key:
+        return []
+    try:
+        payload = _get_json(f"{PLAYER_AUCTION_URL}?player={uuid}&key={api_key}")
+    except HypixelError:
+        return []
+    return payload.get("auctions", []) if payload.get("success") else []
+
+
+def fetch_player(uuid: str, api_key: str) -> dict | None:
+    """General Hypixel player object (needs key)."""
+    if not api_key:
+        return None
+    try:
+        payload = _get_json(f"{PLAYER_URL}?uuid={uuid}&key={api_key}")
+    except HypixelError:
+        return None
+    return payload.get("player") if payload.get("success") else None
+
+
+def fetch_resource(name: str, ttl: float = RESOURCE_TTL,
+                   use_cache: bool = True) -> dict | None:
+    """Public reference data, e.g. ``skills`` or ``collections`` (no key)."""
+    cache_name = f"resource_{name}.json"
+    if use_cache:
+        cached = _read_cache(cache_name, ttl)
+        if cached is not None:
+            return cached
+    try:
+        payload = _get_json(f"{RESOURCE_URL}/{name}")
+    except HypixelError:
+        return None
+    if payload.get("success"):
+        _write_cache(cache_name, payload)
+        return payload
+    return None

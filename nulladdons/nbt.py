@@ -123,6 +123,14 @@ def parse(data: bytes):
     return r.payload(root_tag)
 
 
+def parse_b64(b64: str):
+    """Decode a base64 (gzipped) NBT string into Python structures, or {}."""
+    try:
+        return parse(base64.b64decode(b64))
+    except (ValueError, OSError, struct.error, base64.binascii.Error):
+        return {}
+
+
 def _walk_ids(node, out: set[str]) -> None:
     if isinstance(node, dict):
         extra = node.get("ExtraAttributes")

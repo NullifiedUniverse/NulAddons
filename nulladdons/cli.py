@@ -24,7 +24,8 @@ import time
 
 from . import accessories as accessoriesmod
 from . import accounts as accountsmod
-from . import commands, craft, economy, flip, hypixel, mechanics, notify
+from . import (auction, brief as briefmod, commands, craft, economy, flip,
+               hypixel, llm, mechanics, notify, progress)
 from .bazaar import Market
 from .history import PriceHistory, record_snapshot
 
@@ -90,6 +91,20 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(al)
     al.add_argument("--watch", type=float, default=None, metavar="MINUTES",
                     help="re-check every MINUTES and post only new opportunities")
+
+    ah = sub.add_parser("ah", help="Auction House insights (recent sales, your listings)")
+    _add_common(ah)
+    ah.add_argument("--scan", type=int, default=0, metavar="PAGES",
+                    help="scan PAGES of the live AH for underpriced BIN flips")
+
+    br = sub.add_parser("brief", help="daily SkyBlock brief (progress + Gemini insights)")
+    _add_common(br)
+    br.add_argument("--accessories", default=DEFAULT_ACCESSORIES)
+    br.add_argument("--gemini-key", default=os.environ.get("GEMINI_API_KEY"),
+                    help="Gemini API key (or set GEMINI_API_KEY / config)")
+    br.add_argument("--gemini-model", default=None, help="Gemini model id")
+    br.add_argument("--no-llm", action="store_true",
+                    help="skip Gemini, use the deterministic local brief")
     return parser
 
 
@@ -298,6 +313,128 @@ def _cmd_alert(args):
             print("\n· stopped watching", file=sys.stderr)
 
 
+def _resolve_uuid(ctx):
+    return ctx.uuid or hypixel.resolve_uuid(ctx.username)
+
+
+def _mp_plan_for(ctx, market, accessories_path, recipes):
+    accs = accessoriesmod.load_accessories(accessories_path)
+    engine = accessoriesmod.AccessoryEngine(market, accs, recipes)
+    id_to_family = {a.id: a.family for a in accs}
+    owned_fams = set(ctx.owned_families) | {
+        id_to_family[i] for i in ctx.owned_item_ids if i in id_to_family}
+    return accessoriesmod.plan_magic_power(
+        engine, accs, ctx.owned_item_ids, owned_fams, mp_goal=ctx.mp_goal, top=6)
+
+
+def _cmd_ah(args):
+    ctx, config = _build_account(args)
+    ended = hypixel.fetch_auctions_ended()
+    sales = auction.sales_from_ended(ended)
+    added = auction.record_sales(sales)
+    index = auction.SalePriceIndex.load()
+    print(f"Auction House — {ctx.name}   "
+          f"(sale index: {len(index._by_id)} items, +{added} this run)\n")
+
+    top = sorted(sales, key=lambda s: s["price"], reverse=True)[:10]
+    print("Recent notable sales:")
+    for s in top:
+        kind = "BIN" if s["bin"] else "bid"
+        print(f"  {commands.nice_name(s['id']):32s} {commands.coins(s['price']):>10}"
+              f"  [{kind}]")
+
+    api_key = args.api_key or config.get("hypixel_api_key")
+    if api_key:
+        uuid = _resolve_uuid(ctx)
+        if uuid:
+            summary = auction.player_listing_summary(
+                hypixel.fetch_player_auctions(uuid, api_key))
+            print(f"\nYour listings: {summary.active} active "
+                  f"({commands.coins(summary.active_value)}), "
+                  f"{summary.sold_claimable} sold & claimable "
+                  f"({commands.coins(summary.sold_value)})")
+            for ln in summary.lines[:8]:
+                print(f"  · {ln}")
+
+    if args.scan:
+        print(f"\nScanning {args.scan} page(s) of the live AH for BIN flips…")
+        flips = auction.find_bin_flips(hypixel.fetch_auctions_page, index,
+                                       max_pages=args.scan)
+        if not flips:
+            print("  none clearing the discount/profit floor "
+                  "(need several recent samples per item).")
+        for f in flips:
+            print(f"  {commands.nice_name(f.name):28s} buy {commands.coins(f.buy_price)}"
+                  f" → median {commands.coins(f.market_median)}  "
+                  f"= {commands.coins(f.profit)} (-{f.discount:.0%}, "
+                  f"{f.samples} samples) ⚠ verify item stats")
+
+
+def _cmd_brief(args):
+    market, history = _load_market(args)
+    ctx, config = _build_account(args)
+    api_key = args.api_key or config.get("hypixel_api_key")
+    gem_key = None if args.no_llm else (
+        args.gemini_key or config.get("gemini_api_key"))
+    gem_model = args.gemini_model or config.get("gemini_model") or llm.DEFAULT_MODEL
+    recipes = craft.load_recipes(args.recipes)
+
+    # 1) Progress snapshot + day-over-day diff (needs a Hypixel key).
+    stats = prog_diff = None
+    uuid = None
+    if api_key:
+        uuid = _resolve_uuid(ctx)
+        payload = hypixel.fetch_profiles(uuid, api_key) if uuid else None
+        if payload:
+            skills_res = hypixel.fetch_resource("skills")
+            profile, member = progress.pick_member(payload, uuid)
+            stats = progress.extract_stats(profile, member, skills_res)
+            hist = progress.load_history(ctx.name)
+            prog_diff = progress.diff(progress.previous_snapshot(hist, stats), stats)
+            progress.save_snapshot(ctx.name, stats)
+    else:
+        print("· no Hypixel key — market-only brief (set hypixel_api_key for "
+              "progress tracking)", file=sys.stderr)
+
+    # 2) Market + MP opportunities.
+    flips = flip.find_flips(market, ctx.params, ctx.budget, history, limit=6,
+                            blacklist=ctx.blacklist, whitelist=ctx.whitelist)
+    crafts = craft.find_crafts(market, recipes, ctx.params, ctx.budget, history,
+                               ctx.allowed_outputs, limit=4,
+                               blacklist=ctx.blacklist, whitelist=ctx.whitelist)
+    mp_plan = _mp_plan_for(ctx, market, args.accessories, recipes)
+
+    # 3) Auction House highlights.
+    sales = auction.sales_from_ended(hypixel.fetch_auctions_ended())
+    auction.record_sales(sales)
+    index = auction.SalePriceIndex.load()
+    recent = [(s["id"], s["price"])
+              for s in sorted(sales, key=lambda x: x["price"], reverse=True)[:6]]
+    listings = None
+    if api_key and uuid:
+        listings = auction.player_listing_summary(
+            hypixel.fetch_player_auctions(uuid, api_key))
+    ah = {"recent_sales": recent, "index_size": len(index._by_id),
+          "listings": listings}
+
+    ctxd = briefmod.build_context(
+        ctx, data_age=market.age_seconds(), stats=stats, prog_diff=prog_diff,
+        flips=flips, crafts=crafts, mp_plan=mp_plan, ah=ah)
+    summary, via_llm = briefmod.summarize(ctxd, gem_key, gem_model)
+    if gem_key and not via_llm:
+        print("· Gemini call failed — showing local brief", file=sys.stderr)
+    print(briefmod.render_brief(ctxd, summary, via_llm))
+
+    webhook = args.webhook or ctx.webhook_url
+    if webhook:
+        embed = {"title": f"📅 SkyBlock Daily Brief — {ctx.name}",
+                 "description": summary[:4000], "color": 0x9B59B6,
+                 "footer": {"text": "Null's Addons"}}
+        ok = notify.post_webhook(webhook, embeds=[embed])
+        print(f"· brief {'posted to' if ok else 'FAILED to post to'} Discord",
+              file=sys.stderr)
+
+
 def _cmd_accounts(args):
     config = accountsmod.load_config()
     print("Configured accounts:\n")
@@ -318,7 +455,7 @@ def _cmd_accounts(args):
 _DISPATCH = {
     "plan": _cmd_plan, "flips": _cmd_flips, "crafts": _cmd_crafts,
     "item": _cmd_item, "mp": _cmd_mp, "alert": _cmd_alert,
-    "accounts": _cmd_accounts,
+    "ah": _cmd_ah, "brief": _cmd_brief, "accounts": _cmd_accounts,
 }
 
 

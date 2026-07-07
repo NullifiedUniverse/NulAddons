@@ -47,6 +47,8 @@ python3 -m nulladdons plan                 # the headline: a full session plan
 python3 -m nulladdons flips --top 10       # ranked order flips
 python3 -m nulladdons crafts               # ranked craft flips
 python3 -m nulladdons mp                    # cheapest Magical Power to buy/craft/recomb
+python3 -m nulladdons ah                     # Auction House: recent sales + your listings
+python3 -m nulladdons brief                  # daily brief: progress + insights (Gemini)
 python3 -m nulladdons item ENCHANTED_LAPIS_LAZULI   # deep dive on one product
 python3 -m nulladdons accounts             # your configured accounts
 
@@ -273,6 +275,51 @@ Set the webhook once in `config/accounts.json` (`discord_webhook_url` globally, 
 `webhook_url` per account) and drop the flag.  The watch loop de‑dupes so you're
 never spammed with the same flip twice.
 
+## Auction House (`ah`)
+
+The Bazaar is only half the economy.  The AH API is heavy (~50k live auctions
+across 50 pages), so `ah` leans on the light, public `auctions_ended` feed for
+price discovery and only scans the live book when you ask:
+
+* **Recent notable sales** — decodes the ended‑auction feed (item ids from NBT,
+  pets included) and shows what actually sold and for how much.
+* **Rolling sale‑price index** — every run appends real sales to a local log, so a
+  per‑item recent median builds up over time (the more you run it, the deeper).
+* **Your listings** (`--live` + key) — what's active, and what's **sold &
+  claimable** so you never forget to collect.
+* **BIN flips** (`--scan N`) — scans `N` pages of the live book for Buy‑It‑Now
+  auctions priced well under an item's recent median.  Conservative and honest:
+  it needs several recent samples and nets AH tax, and it flags that AH items vary
+  by stats (stars/enchants/reforge) — treat these as leads to verify, not sure
+  things.
+
+```bash
+python3 -m nulladdons ah                 # recent sales + (with --live) your listings
+python3 -m nulladdons ah --scan 3        # also scan 3 pages for underpriced BINs
+```
+
+## Daily brief (`brief`) — powered by Gemini
+
+A once‑a‑day SkyBlock briefing.  It **snapshots your account** from the API,
+**diffs it against yesterday's snapshot** (coins, skills + level‑ups, slayer,
+catacombs, collections, pets, fairy souls), gathers the day's best Bazaar/craft
+flips, cheapest Magical Power and Auction House highlights, and feeds all of it as
+**facts** to a Google **Gemini** model acting as a SkyBlock economy & progression
+expert, which returns a short summary with prioritised, actionable advice.
+
+```bash
+export HYPIXEL_API_KEY=...   # for progress tracking (purse/skills/…)
+export GEMINI_API_KEY=...    # for the AI summary (from Google AI Studio)
+python3 -m nulladdons brief -a NullifiedGalaxy --live
+python3 -m nulladdons brief --webhook <discord>       # post the brief to Discord
+# schedule it daily, e.g. cron:  0 9 * * *  cd /path/NulAddons && python3 -m nulladdons brief --live --webhook <url>
+```
+
+Everything degrades gracefully: **no Gemini key** → a deterministic local brief
+built from the same facts; **no Hypixel key** → a market‑only brief (no progress).
+The LLM only ever adds prose on top of numbers the tool already computed — it is
+never load‑bearing for correctness, and is instructed never to invent numbers.
+
 ## Command reference
 
 | Command | Does |
@@ -281,6 +328,8 @@ never spammed with the same flip twice.
 | `flips` | Ranked order flips. |
 | `crafts` | Ranked craft flips. |
 | `mp` | Cheapest Magical Power: accessories to buy/craft + Recombobulator upgrades. |
+| `ah` | Auction House: recent sales, your listings, `--scan N` for BIN flips. |
+| `brief` | Daily brief: account progress diff + opportunities + Gemini insights. |
 | `item <ID>` | Deep dive: book, spread, liquidity, flip economics, confidence breakdown. |
 | `alert` | Post crucial opportunities to Discord (optionally `--watch`). |
 | `accounts` | List configured accounts (with live capital if `--live`). |
@@ -293,8 +342,10 @@ Common flags: `-a/--account`, `-b/--budget`, `-r/--risk`, `--hold-time`,
 
 `budget`, `risk`, `cookie_buffed`, `notes`, plus: `mp_goal`, `owned_families`,
 `blacklist`/`whitelist` (product ids to force‑skip or restrict to), `webhook_url`
-and `alert` thresholds.  A top‑level `discord_webhook_url` and `alert` apply to all
-accounts unless overridden.
+and `alert` thresholds.  Top‑level keys apply to all accounts: `hypixel_api_key`,
+`gemini_api_key`, `gemini_model`, `discord_webhook_url`, and default `alert`
+thresholds.  Any of these can also come from `--flags` or the `HYPIXEL_API_KEY` /
+`GEMINI_API_KEY` environment variables.
 
 ---
 
@@ -310,19 +361,32 @@ nulladdons/
   flip.py        Order-flip finder (+ blacklist/whitelist)
   craft.py       Craft-flip finder (recursive cheapest-acquisition arbitrage)
   accessories.py Magical Power planner (coins/MP, Recombobulator lever)
-  nbt.py         Minimal NBT reader — decodes the live talisman bag for personalisation
+  nbt.py         Minimal NBT reader — decodes talisman bags & auction items
+  auction.py     Auction House: sale-price index, your listings, BIN flips
+  progress.py    Account snapshots + day-over-day progression diff
+  llm.py         Google Gemini client (SkyBlock-expert brain of the brief)
+  brief.py       Assembles the daily brief (facts -> Gemini -> summary)
   accounts.py    Per-account personalisation & risk profiles
   commands.py    Renders plans into direct commands + the diversified portfolio
   notify.py      Discord webhook notifier for crucial messages
   cli.py         Command-line interface
-config/accounts.json     Account settings (budget, risk, blacklist, mp_goal, webhook…)
+config/accounts.json     Account settings (budget, risk, blacklist, mp_goal, keys, webhook…)
 data/recipes.json        Craft recipe database
 data/accessories.json    Accessory / Magical-Power database
 data/sample_bazaar.json  Bundled snapshot for --offline / demos
-tests/                    Unit tests (no network): test_core.py, test_features.py
+tests/                    Unit tests (no network): test_core / test_features / test_brief
 ```
 
-Run the tests with `python3 -m unittest discover -s tests` (29 tests).
+Run the tests with `python3 -m unittest discover -s tests` (40 tests).
+
+## Hypixel APIs used
+
+All fetched live, stdlib‑only, cached briefly: `skyblock/bazaar`,
+`skyblock/auctions_ended` (+ paginated `skyblock/auctions` for BIN scans),
+`skyblock/auction` (your listings), `skyblock/profiles` (progress + capital +
+talisman bag), and `resources/skyblock/skills` (level thresholds).  Usernames
+resolve via Mojang.  Personalised data (profiles, listings) needs a free key from
+[developer.hypixel.net](https://developer.hypixel.net).
 
 ### Refined fill model
 

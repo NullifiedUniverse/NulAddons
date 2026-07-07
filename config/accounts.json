@@ -1,6 +1,8 @@
 {
   "_comment": "Per-account settings for Null's Addons. 'budget' is used offline / without an API key; pass --live with a Hypixel key to override it with the account's real purse + bank (and read your talisman bag for the mp planner). 'cookie_buffed': true lowers Bazaar tax 1.25%->1.1%. 'blacklist'/'whitelist' restrict which products to trade. 'mp_goal' targets Magical Power. 'owned_families' lists accessory families you already have (skipped by the mp planner) when not using --live. 'webhook_url' + 'alert' drive Discord notifications; a top-level 'discord_webhook_url'/'alert' apply to all accounts unless overridden.",
   "hypixel_api_key": null,
+  "gemini_api_key": null,
+  "gemini_model": "gemini-2.5-flash",
   "discord_webhook_url": null,
   "alert": {
     "min_profit": 1000000,
