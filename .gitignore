@@ -9,6 +9,12 @@ dist/
 # Local runtime data (cache + price history live in ~/.nulladdons)
 .nulladdons/
 
+# Minecraft mod (Gradle / ForgeGradle) build artifacts
+mod/build/
+mod/run/
+mod/.gradle/
+*.class
+
 # Env / editors
 .venv/
 venv/

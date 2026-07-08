@@ -32,6 +32,12 @@ python3 -m nulladdons ask "what should I flip?"   # ask anything, in plain Engli
 That's it. Everything works out of the box on the bundled example account, and
 `setup` personalises it to you. Not sure something's configured? `nulladdons doctor`.
 
+**Prefer it in‑game?** There's a companion **Minecraft mod** (client‑side, Forge
+1.8.9) in [`mod/`](mod/README.md): a movable top‑flips HUD and live flip numbers
+on Bazaar item tooltips, styled like SkyBlockAddons/NEU — fully async and cached,
+so it only shows up on SkyBlock and costs nothing otherwise. Same economics
+engine, ported to Java and self‑tested.
+
 ---
 
 ## What "Bazaar Flipping" is

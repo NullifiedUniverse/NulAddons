@@ -1,0 +1,50 @@
+// Null's Addons — Forge 1.8.9 client mod.
+// Toolchain: JDK 8 + Gradle 4.x (ForgeGradle 2.1 targets Minecraft 1.8.9).
+buildscript {
+    repositories {
+        jcenter()
+        maven { name = "forge"; url = "https://maven.minecraftforge.net" }
+    }
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:2.1-SNAPSHOT'
+    }
+}
+
+apply plugin: 'net.minecraftforge.gradle.forge'
+
+version = "1.0.0"
+group = "com.nullifieduniverse.nulladdons"
+archivesBaseName = "NullsAddons-1.8.9"
+
+sourceCompatibility = targetCompatibility = '1.8'
+compileJava {
+    sourceCompatibility = targetCompatibility = '1.8'
+}
+
+minecraft {
+    version = "1.8.9-11.15.1.2318-1.8.9"
+    runDir = "run"
+    // stable_22 is the standard MCP mapping set for 1.8.9.
+    mappings = "stable_22"
+}
+
+// Keep the self-test out of the shipped jar; it isn't a JUnit test.
+sourceSets {
+    test {
+        java { srcDirs = ['src/test/java'] }
+    }
+}
+test.enabled = false
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "mcversion", project.minecraft.version
+
+    from(sourceSets.main.resources.srcDirs) {
+        include 'mcmod.info'
+        expand 'version': project.version, 'mcversion': project.minecraft.version
+    }
+    from(sourceSets.main.resources.srcDirs) {
+        exclude 'mcmod.info'
+    }
+}

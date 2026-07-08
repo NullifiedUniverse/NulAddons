@@ -1,0 +1,15 @@
+[
+  {
+    "modid": "nulladdons",
+    "name": "Null's Addons",
+    "description": "Brings the Null's Addons Bazaar-flipping engine into Hypixel SkyBlock: a movable top-flips HUD and live buy-order/sell-offer/margin/coins-per-hour numbers on Bazaar item tooltips. Fully async and cached, client-side only, and it only renders while you're on SkyBlock — seamless when you need it, invisible when you don't.",
+    "version": "${version}",
+    "mcversion": "${mcversion}",
+    "url": "https://github.com/NullifiedUniverse/NulAddons",
+    "authorList": ["NullifiedUniverse"],
+    "credits": "Powered by the Null's Addons economics engine.",
+    "logoFile": "",
+    "screenshots": [],
+    "dependencies": []
+  }
+]
