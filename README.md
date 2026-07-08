@@ -16,6 +16,22 @@ It is **advisory**: it tells *you* what to do, you place the orders yourself in
 game. It never automates play. Think of it as a market analyst sitting next to
 you, not a bot.
 
+## ▶ Run it in 30 seconds
+
+You need **Python 3.9+** and an internet connection. Nothing to install.
+
+```bash
+git clone https://github.com/NullifiedUniverse/NulAddons && cd NulAddons
+
+python3 -m nulladdons setup      # 2-min wizard (optional keys + your account)
+python3 -m nulladdons status     # your dashboard: capital → income → goals
+python3 -m nulladdons plan       # the exact orders to place right now
+python3 -m nulladdons ask "what should I flip?"   # ask anything, in plain English
+```
+
+That's it. Everything works out of the box on the bundled example account, and
+`setup` personalises it to you. Not sure something's configured? `nulladdons doctor`.
+
 ---
 
 ## What "Bazaar Flipping" is
@@ -376,6 +392,36 @@ built from the same facts; **no Hypixel key** → a market‑only brief (no prog
 The LLM only ever adds prose on top of numbers the tool already computed — it is
 never load‑bearing for correctness, and is instructed never to invent numbers.
 
+## Ask anything (grounded AI, never makes things up)
+
+Ask in plain English and get an answer built **only** from live Hypixel data:
+
+```bash
+python3 -m nulladdons ask "how much profit flipping enchanted diamond?"
+python3 -m nulladdons ask "who's the mayor and does it matter?"
+python3 -m nulladdons ask "how long until I hit 500m?"
+python3 -m nulladdons ask "what should I craft right now?"
+python3 -m nulladdons ask "should I flip enchanted lapis" --show-facts   # see the grounding
+```
+
+How it stays honest:
+
+1. **Retrieval** — your question is parsed for the items and topics it mentions,
+   and only the *relevant* live facts (Bazaar prices, the Mayor, your capital,
+   top flips, AH sales…) are assembled into a FACTS sheet (`--show-facts` prints it).
+2. **Answering** — with a Gemini key, those facts + your question go to the model
+   under a strict prompt that **forbids inventing anything** and requires it to
+   reply *"I don't know based on the current data."* when the facts don't cover it.
+   Numbers only ever come from the live API.
+
+No Gemini key?  A built‑in **local answerer** still handles the common questions
+(price, flip, mayor, income, budget, magical power, best flip/craft) from the same
+live facts — and also says *"I don't know"* rather than guess.  So the AI works
+for everyone; a key just unlocks open‑ended questions.
+
+> Ask it "how do I beat Necron?" and it will honestly say it doesn't know — it's a
+> live‑market analyst, not a wiki, and it won't pretend otherwise.
+
 ## Game‑aware: the Mayor runs the economy
 
 Every ~5 SkyBlock days the community elects a **Mayor** whose perks reshape the
@@ -410,6 +456,7 @@ tool.
 |---|---|
 | `setup` | Interactive first‑run wizard: keys, Discord, accounts, goals (writes `~/.nulladdons/accounts.json`). |
 | `doctor` | Health check: validates keys, resolves accounts, tests connectivity — with a fix hint per line. |
+| `ask "…"` | Grounded AI: answer any question from live data, or honestly say "I don't know". |
 | `status` | Ecosystem dashboard: live capital → income projection → goal ETAs → next action. |
 | `plan` | Diversified, budgeted set of orders to place now (default). |
 | `flips` | Ranked order flips. |
@@ -454,7 +501,8 @@ nulladdons/
   nbt.py         Minimal NBT reader — decodes talisman bags & auction items
   auction.py     Auction House: sale-price index, your listings, BIN flips
   progress.py    Account snapshots + day-over-day progression diff
-  llm.py         Google Gemini client (SkyBlock-expert brain of the brief)
+  llm.py         Google Gemini client (brief brain + grounded Q&A persona)
+  ask.py         Grounded question-answerer (retrieval + no-hallucination answers)
   brief.py       Assembles the daily brief (facts -> Gemini -> summary)
   accounts.py    Per-account personalisation, risk profiles & config resolution
   onboarding.py  Setup wizard + doctor health check
@@ -466,10 +514,10 @@ config/accounts.json     Bundled example config (your real one lives in ~/.nulla
 data/recipes.json        Craft recipe database
 data/accessories.json    Accessory / Magical-Power database
 data/sample_bazaar.json  Bundled snapshot for --offline / demos
-tests/                    Unit tests (no network): test_core / test_features / test_brief / test_ecosystem / test_onboarding / test_mayor
+tests/                    Unit tests (no network): test_core / test_features / test_brief / test_ecosystem / test_onboarding / test_mayor / test_ask
 ```
 
-Run the tests with `python3 -m unittest discover -s tests` (69 tests).
+Run the tests with `python3 -m unittest discover -s tests` (82 tests).
 
 ### Robustness — new items never crash the app
 

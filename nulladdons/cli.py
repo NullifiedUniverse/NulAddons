@@ -29,8 +29,9 @@ import time
 
 from . import accessories as accessoriesmod
 from . import accounts as accountsmod
-from . import (auction, brief as briefmod, commands, craft, economy, flip,
-               hypixel, llm, mayor, mechanics, notify, onboarding, progress, ui)
+from . import (ask as askmod, auction, brief as briefmod, commands, craft,
+               economy, flip, hypixel, llm, mayor, mechanics, notify,
+               onboarding, progress, projection, ui)
 from .bazaar import Market
 from .history import PriceHistory, record_snapshot
 
@@ -113,6 +114,18 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(ah)
     ah.add_argument("--scan", type=int, default=0, metavar="PAGES",
                     help="scan PAGES of the live AH for underpriced BIN flips")
+
+    aq = sub.add_parser("ask", help="ask anything about the live market / your account")
+    _add_common(aq)
+    aq.add_argument("question", nargs="+", help="your question in plain English")
+    aq.add_argument("--show-facts", action="store_true",
+                    help="also print the live facts the answer is grounded in")
+    aq.add_argument("--accessories", default=DEFAULT_ACCESSORIES)
+    aq.add_argument("--gemini-key", default=os.environ.get("GEMINI_API_KEY"),
+                    help="Gemini API key (or set GEMINI_API_KEY / config)")
+    aq.add_argument("--gemini-model", default=None, help="Gemini model id")
+    aq.add_argument("--no-llm", action="store_true",
+                    help="answer locally only (no Gemini call)")
 
     st = sub.add_parser("status", help="ecosystem dashboard: capital → income → goals")
     _add_common(st)
@@ -426,6 +439,52 @@ def _market_movers(market, history, min_liquidity: int = 500_000,
     return ranked[:top]
 
 
+def _cmd_ask(args):
+    question = " ".join(args.question).strip()
+    market, history = _load_market(args)
+    ctx, config = _build_account(args)
+    api_key = args.api_key or config.get("hypixel_api_key")
+    gem_key = None if args.no_llm else (
+        args.gemini_key or config.get("gemini_api_key"))
+    gem_model = args.gemini_model or config.get("gemini_model") or llm.DEFAULT_MODEL
+    recipes = craft.load_recipes(args.recipes)
+
+    # Retrieve just the facts relevant to the question.
+    items = [(pid, market.get(pid)) for pid in askmod.find_items(question, market)
+             if market.get(pid)]
+    flips = flip.find_flips(market, ctx.params, ctx.budget, history, limit=5,
+                            blacklist=ctx.blacklist, whitelist=ctx.whitelist)
+    crafts = craft.find_crafts(market, recipes, ctx.params, ctx.budget, history,
+                               ctx.allowed_outputs, limit=4,
+                               blacklist=ctx.blacklist, whitelist=ctx.whitelist)
+    portfolio = commands.build_portfolio(ctx, market, recipes, history)
+    proj = projection.project_bazaar_income(portfolio, ctx.active_hours)
+    mp_plan = _mp_plan_for(ctx, market, args.accessories, recipes)
+
+    stats = uuid = None
+    if api_key:
+        stats, _, uuid = _load_progress(ctx, api_key, save=False)
+    ah = _ah_context(ctx, api_key, uuid, top_sales=5)
+
+    ac = askmod.AskContext(
+        account=ctx, market=market, tax=ctx.params.tax, mayor=ctx.mayor,
+        items=items, flips=flips, crafts=crafts, mp_plan=mp_plan, projection=proj,
+        ah_recent=ah.get("recent_sales", []),
+        ah_index=auction.SalePriceIndex.load(), stats=stats,
+        data_age=market.age_seconds())
+
+    if args.show_facts:
+        print(askmod.build_facts(ac))
+        print("─" * 60)
+    text, via_llm = askmod.answer(question, ac, gem_key, gem_model)
+    tag = "Gemini, grounded in live data" if via_llm else "local answer from live data"
+    print(text)
+    print(ui.c(f"\n[{tag}]", "grey"))
+    if not gem_key and not args.no_llm:
+        print(ui.c("tip: add a Gemini key (`nulladdons setup`) for open-ended "
+                   "questions.", "grey"), file=sys.stderr)
+
+
 def _cmd_status(args):
     market, history = _load_market(args)
     ctx, config = _build_account(args)
@@ -579,7 +638,7 @@ _DISPATCH = {
     "plan": _cmd_plan, "flips": _cmd_flips, "crafts": _cmd_crafts,
     "item": _cmd_item, "mp": _cmd_mp, "alert": _cmd_alert,
     "ah": _cmd_ah, "brief": _cmd_brief, "status": _cmd_status,
-    "accounts": _cmd_accounts,
+    "ask": _cmd_ask, "accounts": _cmd_accounts,
 }
 
 
