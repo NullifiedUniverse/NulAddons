@@ -82,7 +82,7 @@ class Accessory:
 
 def load_accessories(path: str) -> list[Accessory]:
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
     except (OSError, ValueError):
         return []  # missing/corrupt DB -> no accessory suggestions, never a crash

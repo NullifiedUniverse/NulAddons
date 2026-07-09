@@ -22,25 +22,13 @@ markets with a comfortable margin and high confidence.
 from __future__ import annotations
 
 import json
-import math
 import os
 from dataclasses import dataclass, field
 
 from . import hypixel, mechanics, nbt
 from .economy import EvalParams
-
-
-def _num(value, default: float = 0.0) -> float:
-    """Coerce config / live-profile values to a finite float; default on bad input."""
-    try:
-        f = float(value)
-    except (TypeError, ValueError):
-        return default
-    return f if math.isfinite(f) else default
-
-
-def _int(value, default: int = 0) -> int:
-    return int(_num(value, default))
+from .util import to_float as _num
+from .util import to_int as _int
 
 # Each profile is a set of overrides applied on top of EvalParams' defaults.
 RISK_PROFILES: dict[str, dict] = {
@@ -139,7 +127,7 @@ def load_config(path: str | None = None) -> dict:
     """Load config from the active path, or a safe empty default if missing/bad."""
     p = path or config_path()
     try:
-        with open(p, "r", encoding="utf-8") as fh:
+        with open(p, encoding="utf-8") as fh:
             cfg = json.load(fh)
         return cfg if isinstance(cfg, dict) else default_config()
     except (OSError, ValueError):

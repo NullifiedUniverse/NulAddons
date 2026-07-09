@@ -74,7 +74,7 @@ def run_setup(config_path: str | None = None) -> tuple[dict, str]:
 
     # --- integrations -------------------------------------------------------
     ui.section("API keys & integrations (all optional)")
-    ui.info(f"A free Hypixel key unlocks live capital, progress tracking and your")
+    ui.info("A free Hypixel key unlocks live capital, progress tracking and your")
     ui.info(f"AH listings.  Get one at {HYPIXEL_KEY_URL}")
     hkey = ui.ask_secret("Hypixel API key", cfg.get("hypixel_api_key")) or None
 

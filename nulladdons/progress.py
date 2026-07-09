@@ -20,6 +20,9 @@ import os
 import time
 from datetime import datetime, timezone
 
+from .util import to_float as _num
+from .util import to_int as _int
+
 PROGRESS_DIR = os.path.join(os.path.expanduser("~"), ".nulladdons", "progress")
 
 ALL_SKILLS = ["FARMING", "MINING", "COMBAT", "FORAGING", "FISHING", "ENCHANTING",
@@ -37,20 +40,6 @@ def _get(node, *keys, default=None):
         if node is None:
             return default
     return node
-
-
-def _num(value, default: float = 0.0) -> float:
-    """Coerce to a finite float; ``default`` on None/str/dict/NaN/inf."""
-    try:
-        f = float(value)
-    except (TypeError, ValueError):
-        return default
-    return f if math.isfinite(f) else default
-
-
-def _int(value, default: int = 0) -> int:
-    n = _num(value, default)
-    return int(n) if math.isfinite(n) else default
 
 
 def level_from_xp(xp: float, skill_levels: list[dict] | None) -> int | None:
@@ -167,7 +156,7 @@ def load_history(account: str) -> list[dict]:
         return []
     out = []
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             for line in fh:
                 try:
                     out.append(json.loads(line))

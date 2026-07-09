@@ -29,9 +29,25 @@ import time
 
 from . import accessories as accessoriesmod
 from . import accounts as accountsmod
-from . import (ask as askmod, auction, brief as briefmod, commands, craft,
-               economy, flair, flip, hypixel, llm, mayor, mechanics, notify,
-               onboarding, progress, projection, ui)
+from . import ask as askmod
+from . import (
+    auction,
+    commands,
+    craft,
+    economy,
+    flair,
+    flip,
+    hypixel,
+    llm,
+    mayor,
+    mechanics,
+    notify,
+    onboarding,
+    progress,
+    projection,
+    ui,
+)
+from . import brief as briefmod
 from .bazaar import Market
 from .history import PriceHistory, record_snapshot
 
@@ -91,7 +107,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp_doc.add_argument("--quick", action="store_true",
                         help="skip the live Gemini test call")
 
-    sub.add_parser("lore", help=argparse.SUPPRESS)  # a little something to find
+    # Undocumented on purpose: no help text, so it stays out of the detailed
+    # command list but still peeks from the usage line -- a little something to find.
+    sub.add_parser("lore")
 
     for name, help_ in (("plan", "diversified session plan (default)"),
                         ("flips", "ranked order flips"),

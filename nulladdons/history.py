@@ -47,7 +47,7 @@ def record_snapshot(market, path: str = DEFAULT_HISTORY_PATH) -> None:
 
 def _truncate(path: str) -> None:
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             lines = fh.readlines()
         if len(lines) > MAX_SNAPSHOTS:
             with open(path, "w", encoding="utf-8") as fh:
@@ -62,7 +62,7 @@ def load_series(path: str = DEFAULT_HISTORY_PATH) -> dict[str, list[float]]:
     if not os.path.exists(path):
         return series
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             for raw in fh:
                 raw = raw.strip()
                 if not raw:
@@ -82,7 +82,7 @@ class PriceHistory:
         self.series = series
 
     @classmethod
-    def load(cls, path: str = DEFAULT_HISTORY_PATH) -> "PriceHistory":
+    def load(cls, path: str = DEFAULT_HISTORY_PATH) -> PriceHistory:
         return cls(load_series(path))
 
     def samples(self, pid: str) -> int:

@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from nulladdons import accessories, craft, economy, flip, nbt, notify  # noqa: E402
+from nulladdons import accessories, economy, flip, nbt, notify  # noqa: E402
 from nulladdons.bazaar import Market, Product  # noqa: E402
 from nulladdons.economy import EvalParams  # noqa: E402
 
@@ -126,7 +126,8 @@ class TestMagicalPower(unittest.TestCase):
 class TestNBT(unittest.TestCase):
     def _bag(self, ids):
         def s(n):
-            b = n.encode(); return struct.pack(">H", len(b)) + b
+            b = n.encode()
+            return struct.pack(">H", len(b)) + b
 
         def tag_string(name, val):
             v = val.encode()

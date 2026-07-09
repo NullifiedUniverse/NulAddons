@@ -582,3 +582,16 @@ takes realistically longer — which flows straight through to position sizing.
   by the absurdity ceiling, but if you add recipes, double‑check the quantities.
 * This is an **analysis tool** that suggests manual actions. It does not
   automate gameplay.
+
+## Project
+
+* **License:** [MIT](LICENSE) — free to use, modify, and share.
+* **Contributing:** see [CONTRIBUTING.md](CONTRIBUTING.md) for the golden rules
+  (numbers stay honest, the tool stays advisory) and how to run the tests.
+* **Changelog:** [CHANGELOG.md](CHANGELOG.md).
+* **Tests:** `python3 -m unittest discover -s tests` (87 Python tests) plus a
+  standalone Java self-test for the mod core (44 checks). CI runs both on every
+  push.
+
+Null's Addons is an unofficial, fan‑made tool. It is not affiliated with,
+endorsed by, or associated with Hypixel Inc. or Mojang/Microsoft.

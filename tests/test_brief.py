@@ -20,10 +20,12 @@ from nulladdons import auction, brief, llm, progress  # noqa: E402
 def item_bytes(item_id, count=1, name=None):
     """Synthesise an auction item's base64 gzipped NBT."""
     def s(n):
-        b = n.encode(); return struct.pack(">H", len(b)) + b
+        b = n.encode()
+        return struct.pack(">H", len(b)) + b
 
     def tstr(nm, val):
-        v = val.encode(); return b"\x08" + s(nm) + struct.pack(">H", len(v)) + v
+        v = val.encode()
+        return b"\x08" + s(nm) + struct.pack(">H", len(v)) + v
 
     extra = b"\x0a" + s("ExtraAttributes") + tstr("id", item_id) + b"\x00"
     disp = b"\x0a" + s("display") + tstr("Name", name or item_id) + b"\x00"

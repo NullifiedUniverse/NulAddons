@@ -6,6 +6,11 @@ build/
 dist/
 .eggs/
 
+# Tooling caches
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
 # Local runtime data (cache + price history live in ~/.nulladdons)
 .nulladdons/
 

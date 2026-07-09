@@ -309,7 +309,7 @@ def render_status(account: AccountContext, portfolio: list, mp_plan: dict,
     out.append(f" Capital: {coins(account.budget)}   ·   {account.risk} risk"
                f"   ·   {proj.positions} live positions")
     if prog_diff and prog_diff.get("baseline") and prog_diff.get("lines"):
-        out.append(f" Today: " + " · ".join(prog_diff["lines"][:2]))
+        out.append(" Today: " + " · ".join(prog_diff["lines"][:2]))
 
     mayor_ctx = getattr(account, "mayor", None)
     if mayor_ctx is not None:

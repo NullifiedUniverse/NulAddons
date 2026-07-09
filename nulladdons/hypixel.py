@@ -93,7 +93,7 @@ def _read_cache(name: str, ttl: float) -> dict | None:
     if time.time() - os.path.getmtime(path) > ttl:
         return None
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             return json.load(fh)
     except (OSError, ValueError):
         return None
@@ -119,7 +119,7 @@ def fetch_bazaar(ttl: float = DEFAULT_BAZAAR_TTL, use_cache: bool = True,
     * otherwise served from a short-lived disk cache, falling back to the API.
     """
     if offline_path:
-        with open(offline_path, "r", encoding="utf-8") as fh:
+        with open(offline_path, encoding="utf-8") as fh:
             return json.load(fh)
 
     if use_cache:

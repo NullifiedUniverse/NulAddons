@@ -12,8 +12,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from nulladdons import (accessories, auction, commands, craft, economy,  # noqa: E402
-                        flip, projection)
+from nulladdons import accessories, auction, commands, craft, flip, projection  # noqa: E402
 from nulladdons.accounts import AccountContext  # noqa: E402
 from nulladdons.bazaar import Market, Product, parse_product  # noqa: E402
 from nulladdons.economy import EvalParams  # noqa: E402

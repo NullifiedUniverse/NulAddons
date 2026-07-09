@@ -41,7 +41,7 @@ class Recipe:
 
 def load_recipes(path: str) -> list[Recipe]:
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
     except (OSError, ValueError):
         return []  # missing/corrupt DB -> just no craft flips, never a crash

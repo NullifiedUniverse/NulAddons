@@ -23,27 +23,18 @@ Item identity comes from the NBT ``item_bytes`` via :mod:`nulladdons.nbt`.
 from __future__ import annotations
 
 import json
-import math
 import os
 import statistics
 import time
 from dataclasses import dataclass
 
 from . import nbt
+from .util import to_float as _f
 
 SALES_LOG = os.path.join(os.path.expanduser("~"), ".nulladdons", "sales.jsonl")
 MAX_SALES = 40_000
 #: Auction House charges roughly 1% on a completed sale (more for pricey items).
 AH_TAX = 0.01
-
-
-def _f(value, default: float = 0.0) -> float:
-    """Coerce to a finite float; ``default`` on None/str/NaN/inf/bad."""
-    try:
-        f = float(value)
-    except (TypeError, ValueError):
-        return default
-    return f if math.isfinite(f) else default
 
 
 def decode_item(item_bytes: str) -> dict | None:
@@ -124,7 +115,7 @@ def _seen_ids(path: str) -> set[str]:
     if not os.path.exists(path):
         return ids
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             for line in fh:
                 try:
                     ids.add(json.loads(line).get("auction_id"))
@@ -137,7 +128,7 @@ def _seen_ids(path: str) -> set[str]:
 
 def _truncate(path: str) -> None:
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             lines = fh.readlines()
         if len(lines) > MAX_SALES:
             with open(path, "w", encoding="utf-8") as fh:
@@ -153,11 +144,11 @@ class SalePriceIndex:
         self._by_id = by_id
 
     @classmethod
-    def load(cls, path: str = SALES_LOG) -> "SalePriceIndex":
+    def load(cls, path: str = SALES_LOG) -> SalePriceIndex:
         by_id: dict[str, list[float]] = {}
         if os.path.exists(path):
             try:
-                with open(path, "r", encoding="utf-8") as fh:
+                with open(path, encoding="utf-8") as fh:
                     for line in fh:
                         try:
                             s = json.loads(line)

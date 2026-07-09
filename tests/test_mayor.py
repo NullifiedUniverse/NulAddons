@@ -9,10 +9,12 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from nulladdons import mayor  # noqa: E402
+from nulladdons import (
+    mayor,  # noqa: E402
+    mechanics,  # noqa: E402
+)
 from nulladdons.economy import EvalParams  # noqa: E402
 from nulladdons.history import PriceHistory  # noqa: E402
-from nulladdons import mechanics  # noqa: E402
 
 
 class TestMayorEffects(unittest.TestCase):

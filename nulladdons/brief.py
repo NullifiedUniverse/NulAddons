@@ -12,7 +12,7 @@ always produces something useful.
 from __future__ import annotations
 
 from . import flair, llm
-from .commands import coins, minutes, nice_name
+from .commands import coins, nice_name
 
 
 def build_context(account, *, data_age=None, stats=None, prog_diff=None,

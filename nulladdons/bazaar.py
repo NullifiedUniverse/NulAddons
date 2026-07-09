@@ -25,27 +25,11 @@ We expose these as ``best_ask`` / ``best_bid`` and ``demand_per_week`` /
 
 from __future__ import annotations
 
-import math
 import time
 from dataclasses import dataclass, field
 
-from . import mechanics
-
-
-def _num(value, default: float = 0.0) -> float:
-    """Coerce to a finite float; ``default`` on None/str/NaN/inf/bad values.
-
-    Rejecting NaN/inf matters: a NaN price would slip past a ``<= 0`` check and
-    poison every downstream calculation."""
-    try:
-        f = float(value)
-    except (TypeError, ValueError):
-        return default
-    return f if math.isfinite(f) else default
-
-
-def _int(value, default: int = 0) -> int:
-    return int(_num(value, default))
+from .util import to_float as _num
+from .util import to_int as _int
 
 
 @dataclass
@@ -181,7 +165,7 @@ class Market:
         return self.products.get(pid)
 
     @classmethod
-    def from_api(cls, payload: dict) -> "Market":
+    def from_api(cls, payload: dict) -> Market:
         """Build a Market from a raw ``/skyblock/bazaar`` response payload."""
         parsed: dict[str, Product] = {}
         for pid, blob in (payload.get("products") or {}).items():
