@@ -1,0 +1,24 @@
+{
+  "_comment": "Craft-flip recipes (standard SkyBlock 160:1 enchant/compact ratios). Ids match the Bazaar API exactly (note INK_SACK:4 = Lapis). Validated live against the snapshot; a bad id simply prices out and is skipped.",
+  "recipes": [
+    {"output": "ENCHANTED_DIAMOND",            "outputQty": 1, "inputs": [["DIAMOND", 160]]},
+    {"output": "ENCHANTED_DIAMOND_BLOCK",      "outputQty": 1, "inputs": [["ENCHANTED_DIAMOND", 160]]},
+    {"output": "ENCHANTED_COBBLESTONE",        "outputQty": 1, "inputs": [["COBBLESTONE", 160]]},
+    {"output": "ENCHANTED_COAL",               "outputQty": 1, "inputs": [["COAL", 160]]},
+    {"output": "ENCHANTED_COAL_BLOCK",         "outputQty": 1, "inputs": [["ENCHANTED_COAL", 160]]},
+    {"output": "ENCHANTED_GOLD",               "outputQty": 1, "inputs": [["GOLD_INGOT", 160]]},
+    {"output": "ENCHANTED_GOLD_BLOCK",         "outputQty": 1, "inputs": [["ENCHANTED_GOLD", 160]]},
+    {"output": "ENCHANTED_IRON",               "outputQty": 1, "inputs": [["IRON_INGOT", 160]]},
+    {"output": "ENCHANTED_IRON_BLOCK",         "outputQty": 1, "inputs": [["ENCHANTED_IRON", 160]]},
+    {"output": "ENCHANTED_REDSTONE",           "outputQty": 1, "inputs": [["REDSTONE", 160]]},
+    {"output": "ENCHANTED_REDSTONE_BLOCK",     "outputQty": 1, "inputs": [["ENCHANTED_REDSTONE", 160]]},
+    {"output": "ENCHANTED_EMERALD",            "outputQty": 1, "inputs": [["EMERALD", 160]]},
+    {"output": "ENCHANTED_EMERALD_BLOCK",      "outputQty": 1, "inputs": [["ENCHANTED_EMERALD", 160]]},
+    {"output": "ENCHANTED_LAPIS_LAZULI",       "outputQty": 1, "inputs": [["INK_SACK:4", 160]]},
+    {"output": "ENCHANTED_LAPIS_LAZULI_BLOCK", "outputQty": 1, "inputs": [["ENCHANTED_LAPIS_LAZULI", 160]]},
+    {"output": "ENCHANTED_STRING",             "outputQty": 1, "inputs": [["STRING", 160]]},
+    {"output": "ENCHANTED_HARD_STONE",         "outputQty": 1, "inputs": [["HARD_STONE", 160]]},
+    {"output": "ENCHANTED_MITHRIL",            "outputQty": 1, "inputs": [["MITHRIL_ORE", 160]]},
+    {"output": "REFINED_MITHRIL",              "outputQty": 1, "inputs": [["ENCHANTED_MITHRIL", 160]]}
+  ]
+}

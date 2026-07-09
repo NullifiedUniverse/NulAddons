@@ -32,11 +32,19 @@ python3 -m nulladdons ask "what should I flip?"   # ask anything, in plain Engli
 That's it. Everything works out of the box on the bundled example account, and
 `setup` personalises it to you. Not sure something's configured? `nulladdons doctor`.
 
-**Prefer it in‑game?** There's a companion **Minecraft mod** (client‑side, Forge
-1.8.9) in [`mod/`](mod/README.md): a movable top‑flips HUD and live flip numbers
-on Bazaar item tooltips, styled like SkyBlockAddons/NEU — fully async and cached,
-so it only shows up on SkyBlock and costs nothing otherwise. Same economics
-engine, ported to Java and self‑tested.
+**Prefer it in‑game?** There are companion **Minecraft mods** that put a movable
+top‑flips HUD and live flip/craft numbers on item tooltips, styled like
+SkyBlockAddons/NEU — fully async and cached, so they only show up on SkyBlock and
+cost nothing otherwise:
+
+* [`mod/`](mod/README.md) — **Forge 1.8.9** (the classic SkyBlock target).
+* [`mod-fabric/`](mod-fabric/README.md) — **Fabric 1.21+** (modern), adding
+  craft‑flip tooltips, Mayor‑aware tax (Derpy → 0 %), and opt‑in
+  [telemetry](mod-fabric/TELEMETRY.md).
+
+Both share the exact same pure‑Java economics `core` (order flips, craft flips,
+mayor effect, manipulation guards), reused with no duplication and covered by a
+38‑check self‑test.
 
 ---
 

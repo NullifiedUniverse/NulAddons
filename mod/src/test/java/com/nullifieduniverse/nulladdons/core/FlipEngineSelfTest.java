@@ -1,5 +1,9 @@
 package com.nullifieduniverse.nulladdons.core;
 
+import com.nullifieduniverse.nulladdons.core.telemetry.TelemetryBuffer;
+import com.nullifieduniverse.nulladdons.core.telemetry.TelemetryEvent;
+
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,6 +87,57 @@ public final class FlipEngineSelfTest {
         List<Flip> top = FlipEngine.topFlips(new BazaarSnapshot(m, 0L), cfg, 10);
         check(top.size() == 1 && top.get(0).productId.equals("GOOD"),
                 "topFlips keeps only the good one");
+
+        // 9) Craft-flip: buy raws, craft, sell the enchanted output.
+        Map<String, Product> cm = new HashMap<String, Product>();
+        cm.put("RAW", new Product("RAW", 5, 6, 10_000_000L, 10_000_000L, 1000L, 1000L));
+        cm.put("ENCH", new Product("ENCH", 1000, 1100, 10_000_000L, 10_000_000L, 1000L, 1000L));
+        BazaarSnapshot cs = new BazaarSnapshot(cm, 0L);
+        Recipe rec = new Recipe("ENCH", 1, Arrays.asList(new Recipe.Ingredient("RAW", 160)));
+        CraftFlip cf = CraftEngine.evaluate(cs, rec, cfg);
+        check(cf != null, "craft flip should evaluate");
+        near(cf.costPerOutput, 160 * 5.1, "craft cost = 160 * (bid + 0.1)");
+        near(cf.margin, (1099.9 * 0.9875 - 816.0) / 816.0, "craft margin");
+        check(CraftEngine.forOutput(cs, Arrays.asList(rec), cfg, "ENCH") != null,
+                "forOutput finds the recipe");
+        check(CraftEngine.forOutput(cs, Arrays.asList(rec), cfg, "NOPE") == null,
+                "forOutput unknown -> null");
+        // Absurd craft margin is rejected by the ceiling.
+        Map<String, Product> am = new HashMap<String, Product>();
+        am.put("RAW", cm.get("RAW"));
+        am.put("ENCH2", new Product("ENCH2", 100000, 101000, 10_000_000L, 10_000_000L, 1000L, 1000L));
+        check(CraftEngine.evaluate(new BazaarSnapshot(am, 0L),
+                new Recipe("ENCH2", 1, Arrays.asList(new Recipe.Ingredient("RAW", 160))), cfg) == null,
+                "absurd craft margin -> null");
+
+        // 10) Mayor effect detection.
+        MayorEffect derpy = MayorEffect.detect("Derpy", "Tax Evasion: no tax.");
+        check(derpy.taxFree() && derpy.taxMultiplier == 0.0, "Derpy is tax-free");
+        MayorEffect diana = MayorEffect.detect("Diana", "Huntress' Intuition");
+        check(!diana.taxFree() && diana.taxMultiplier == 1.0, "Diana no tax effect");
+        check(MayorEffect.detect("Cole", "Mining Fiesta").tag.equals("mining"),
+                "Cole tagged mining");
+
+        // 11a) Bounded: a cap-2 buffer drops the oldest event.
+        TelemetryBuffer bounded = new TelemetryBuffer(2);
+        bounded.add(new TelemetryEvent("first"));
+        bounded.add(new TelemetryEvent("second"));
+        bounded.add(new TelemetryEvent("third"));
+        check(bounded.size() == 2, "buffer bounded to capacity");
+        check(!bounded.drainToJson("x", "1", "1").contains("first"), "oldest event dropped");
+
+        // 11b) JSON is well-formed, PII-free and escaped.
+        TelemetryBuffer buf = new TelemetryBuffer(10);
+        buf.add(new TelemetryEvent("hud_shown").put("count", 5).put("enabled", true));
+        buf.add(new TelemetryEvent("quote\"name"));
+        String json = buf.drainToJson("anon-123", "1.0.0", "1.21");
+        check(json.contains("\"anon_id\":\"anon-123\""), "payload has anon id");
+        check(json.contains("\"mc\":\"1.21\""), "payload has mc version");
+        check(json.contains("\"count\":5"), "numeric field emitted raw (no quotes)");
+        check(json.contains("\"enabled\":true"), "boolean field emitted raw");
+        check(json.contains("quote\\\"name"), "string values are JSON-escaped");
+        check(buf.isEmpty(), "buffer drains empty");
+        check(TelemetryBuffer.escape("a\"b\\c").equals("a\\\"b\\\\c"), "escape quotes/backslashes");
 
         System.out.println("Null's Addons mod core: ALL " + checks + " CHECKS PASSED");
     }

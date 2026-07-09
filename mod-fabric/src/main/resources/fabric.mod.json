@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "nulladdons",
+  "version": "${version}",
+  "name": "Null's Addons",
+  "description": "Bazaar-flipping companion for modern Hypixel SkyBlock: a movable top-flips HUD and live flip + craft numbers on item tooltips. Fully async and cached, client-side only, shows up only on SkyBlock. Optional, off-by-default anonymous telemetry.",
+  "authors": ["NullifiedUniverse"],
+  "contact": {
+    "homepage": "https://github.com/NullifiedUniverse/NulAddons",
+    "sources": "https://github.com/NullifiedUniverse/NulAddons"
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.nullifieduniverse.nulladdons.fabric.NullsAddonsClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}
