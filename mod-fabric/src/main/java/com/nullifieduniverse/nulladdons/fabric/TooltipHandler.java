@@ -1,6 +1,7 @@
 package com.nullifieduniverse.nulladdons.fabric;
 
 import com.nullifieduniverse.nulladdons.core.CraftFlip;
+import com.nullifieduniverse.nulladdons.core.Flair;
 import com.nullifieduniverse.nulladdons.core.Flip;
 import com.nullifieduniverse.nulladdons.core.Format;
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback;
@@ -47,6 +48,8 @@ public final class TooltipHandler implements ItemTooltipCallback {
             String m = " §7Flip " + Format.marginColor(flip.margin)
                     + Format.pct(flip.margin) + " §7after tax";
             if (flip.coinsPerHour > 0) m += " §7· §b" + Format.coins(flip.coinsPerHour) + "§7/hr";
+            String hype = Flair.crackedLabel(flip.margin);
+            if (!hype.isEmpty()) m += " " + hype;
             lines.add(Text.literal(m));
             if (flip.unitProfit <= 0) {
                 lines.add(Text.literal(" §cSpread doesn't cover the tax right now."));

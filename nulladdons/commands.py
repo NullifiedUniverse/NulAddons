@@ -16,6 +16,7 @@ good-looking edges into a low-variance income stream.
 from __future__ import annotations
 
 from . import craft as craftmod
+from . import flair
 from . import flip as flipmod
 from . import projection as projmod
 from .accounts import AccountContext
@@ -63,6 +64,9 @@ def mayor_lines(mc) -> list[str]:
         return []
     out = [f"👑 {mc.headline()}"]
     out += [f"   {n}" for n in mc.notes]
+    quip = flair.mayor_quip("tax_free" if getattr(mc, "tax_free", False) else "")
+    if quip:
+        out.append(f"   {quip}")
     from . import mayor as mayormod
     cand = mayormod.candidates_line(mc)
     if cand:
@@ -135,11 +139,12 @@ def render_craft(plan: CraftPlan, index: int | None = None) -> str:
 # --- magical power plan -----------------------------------------------------
 
 def render_mp_plan(account: AccountContext, plan: dict) -> str:
-    out = [
-        "═" * 68,
-        f" NULL'S ADDONS · MAGICAL POWER PLAN — {account.name} ({account.username})",
-        "═" * 68,
-    ]
+    out = ["═" * 68,
+           f" NULL'S ADDONS · MAGICAL POWER PLAN — {account.name} ({account.username})"]
+    _tag = flair.tagline()
+    if _tag:
+        out.append(f" \"{_tag}\"")
+    out.append("═" * 68)
     detail = f"owned accessories detected: {plan['owned_count']}"
     if not account.live:
         detail += "  (run --live to read your talisman bag)"
@@ -156,7 +161,7 @@ def render_mp_plan(account: AccountContext, plan: dict) -> str:
             out.append(f"        → {b.how}")
         out.append(f"   ⇒ +{plan['mp_gained']} MP for {coins(plan['coins_spent'])} total")
     else:
-        out.append(" BUY / CRAFT: no Bazaar-priceable accessories match right now.")
+        out.append(" BUY / CRAFT: " + flair.empty_mp())
         out.append("   Most cheap MP comes from talisman crafts specific to your")
         out.append("   collections — add their recipes to data/accessories.json and")
         out.append("   they'll be priced and ranked here automatically.")
@@ -242,19 +247,17 @@ def render_portfolio(account: AccountContext, portfolio: list) -> str:
     total_cph = sum(p.coins_per_hour for p in portfolio)
     max_time = max((p.total_minutes for p in portfolio), default=0.0)
 
-    out = [
-        "═" * 68,
-        f" NULL'S ADDONS · SESSION PLAN — {account.summary()}",
-        "═" * 68,
-    ]
+    out = ["═" * 68, f" NULL'S ADDONS · SESSION PLAN — {account.summary()}"]
+    _tag = flair.tagline()
+    if _tag:
+        out.append(f" \"{_tag}\"")
+    out.append("═" * 68)
     mayor_ctx = getattr(account, "mayor", None)
     if mayor_ctx is not None:
         out += mayor_lines(mayor_ctx)
         out.append("")
     if not portfolio:
-        out.append("No opportunities clear this account's risk floor right now.")
-        out.append("Try a lower-risk-floor profile (e.g. --risk aggressive) or "
-                    "wait for the market to move.")
+        out.append(flair.empty_plan())
         return "\n".join(out)
 
     for i, plan in enumerate(portfolio, 1):
@@ -298,13 +301,13 @@ def render_status(account: AccountContext, portfolio: list, mp_plan: dict,
     """The ecosystem dashboard: capital → income → goals → AH → next action."""
     src = "live" if account.live else "config"
     proj = projmod.project_bazaar_income(portfolio, account.active_hours)
-    out = [
-        "═" * 68,
-        f" NULL'S ADDONS · ECOSYSTEM STATUS — {account.name}  [{src}]",
-        "═" * 68,
-        f" Capital: {coins(account.budget)}   ·   {account.risk} risk"
-        f"   ·   {proj.positions} live positions",
-    ]
+    out = ["═" * 68, f" NULL'S ADDONS · ECOSYSTEM STATUS — {account.name}  [{src}]"]
+    _tag = flair.tagline()
+    if _tag:
+        out.append(f" \"{_tag}\"")
+    out.append("═" * 68)
+    out.append(f" Capital: {coins(account.budget)}   ·   {account.risk} risk"
+               f"   ·   {proj.positions} live positions")
     if prog_diff and prog_diff.get("baseline") and prog_diff.get("lines"):
         out.append(f" Today: " + " · ".join(prog_diff["lines"][:2]))
 

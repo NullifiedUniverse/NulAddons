@@ -139,6 +139,17 @@ public final class FlipEngineSelfTest {
         check(buf.isEmpty(), "buffer drains empty");
         check(TelemetryBuffer.escape("a\"b\\c").equals("a\\\"b\\\\c"), "escape quotes/backslashes");
 
+        // 12) Flair: toggleable personality that never touches the numbers.
+        Flair.setSerious(false);
+        check(!Flair.tagline(1L).isEmpty(), "tagline present in fun mode");
+        check(Flair.tagline(1L).equals(Flair.tagline(1L)), "tagline stable per seed");
+        check(Flair.crackedLabel(0.30).contains("CRACKED"), "big margin is CRACKED");
+        check(Flair.crackedLabel(0.02).isEmpty(), "small margin gets no label");
+        Flair.setSerious(true);
+        check(Flair.tagline(1L).isEmpty(), "serious mode: no tagline");
+        check(Flair.crackedLabel(0.30).isEmpty(), "serious mode: no cracked label");
+        Flair.setSerious(false);
+
         System.out.println("Null's Addons mod core: ALL " + checks + " CHECKS PASSED");
     }
 }

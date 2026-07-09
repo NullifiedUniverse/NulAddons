@@ -1,5 +1,6 @@
 package com.nullifieduniverse.nulladdons.fabric;
 
+import com.nullifieduniverse.nulladdons.core.Flair;
 import com.nullifieduniverse.nulladdons.core.Flip;
 import com.nullifieduniverse.nulladdons.core.Format;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
@@ -39,9 +40,11 @@ public final class HudOverlay implements HudRenderCallback {
         lines.add("§6§lNull's Addons §r§7· top flips");
         for (int i = 0; i < count; i++) {
             Flip f = flips.get(i);
+            String hype = Flair.crackedLabel(f.margin);
             lines.add("§f" + Format.niceName(f.productId) + " "
                     + Format.marginColor(f.margin) + Format.pct(f.margin)
-                    + " §7· §b" + Format.coins(f.coinsPerHour) + "§7/hr");
+                    + " §7· §b" + Format.coins(f.coinsPerHour) + "§7/hr"
+                    + (hype.isEmpty() ? "" : " " + hype));
         }
 
         int pad = 3;

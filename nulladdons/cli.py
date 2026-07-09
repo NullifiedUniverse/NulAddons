@@ -30,7 +30,7 @@ import time
 from . import accessories as accessoriesmod
 from . import accounts as accountsmod
 from . import (ask as askmod, auction, brief as briefmod, commands, craft,
-               economy, flip, hypixel, llm, mayor, mechanics, notify,
+               economy, flair, flip, hypixel, llm, mayor, mechanics, notify,
                onboarding, progress, projection, ui)
 from .bazaar import Market
 from .history import PriceHistory, record_snapshot
@@ -46,8 +46,10 @@ def _add_common(p: argparse.ArgumentParser) -> None:
                    help="configured account name (default: your first account)")
     p.add_argument("-b", "--budget", type=float, default=None,
                    help="override capital, in coins")
-    p.add_argument("-r", "--risk", choices=list(accountsmod.RISK_PROFILES),
-                   default=None, help="override risk profile")
+    p.add_argument("-r", "--risk", default=None,
+                   help="override risk profile: conservative / balanced / aggressive")
+    p.add_argument("--serious", action="store_true",
+                   help="disable the personality/flair — clean, neutral output")
     p.add_argument("--hold-time", type=float, default=None,
                    help="max minutes you're willing to wait for a round-trip")
     p.add_argument("--min-margin", type=float, default=None,
@@ -75,7 +77,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="nulladdons",
         description="Null's Addons — Hypixel SkyBlock money-making assistant. "
-                    "New here? Run:  nulladdons setup")
+                    "New here? Run:  nulladdons setup",
+        epilog="tip: try  nulladdons ask \"are you sentient\"  ·  "
+               "add --serious to mute the vibes. not financial advice, it's a block game.")
     sub = parser.add_subparsers(dest="command")
 
     sp_setup = sub.add_parser("setup", help="interactive first-run setup wizard")
@@ -86,6 +90,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp_doc.add_argument("--config", default=None, help="config file to check")
     sp_doc.add_argument("--quick", action="store_true",
                         help="skip the live Gemini test call")
+
+    sub.add_parser("lore", help=argparse.SUPPRESS)  # a little something to find
 
     for name, help_ in (("plan", "diversified session plan (default)"),
                         ("flips", "ranked order flips"),
@@ -214,6 +220,10 @@ def _build_account(args):
     config = accountsmod.load_config()
     name = _resolve_account_name(args, config)
     risk = "conservative" if args.guaranteed else args.risk
+    if risk:  # allow fun aliases like --risk yolo / --risk scared
+        risk, quip = flair.resolve_risk_alias(risk)
+        if quip:
+            print(ui.c("· " + quip, "grey"), file=sys.stderr)
     ctx = accountsmod.build_context(
         name, config, live=args.live, api_key=args.api_key,
         budget_override=args.budget, risk_override=risk)
@@ -256,7 +266,7 @@ def _cmd_flips(args):
         print(commands.mayor_banner(ctx.mayor))
     print()
     if not plans:
-        print("No flips clear this risk floor. Try --risk aggressive.")
+        print(flair.empty_flips())
         return
     for i, plan in enumerate(plans, 1):
         print(commands.render_flip(plan, i))
@@ -275,7 +285,7 @@ def _cmd_crafts(args):
         print(commands.mayor_banner(ctx.mayor))
     print()
     if not plans:
-        print("No craft flips clear this risk floor right now.")
+        print(flair.empty_crafts())
         return
     for i, plan in enumerate(plans, 1):
         print(commands.render_craft(plan, i))
@@ -602,6 +612,10 @@ def _cmd_brief(args):
               file=sys.stderr)
 
 
+def _cmd_lore(args):
+    print(flair.lore())
+
+
 def _cmd_setup(args):
     onboarding.run_setup(config_path=args.config)
 
@@ -638,7 +652,7 @@ _DISPATCH = {
     "plan": _cmd_plan, "flips": _cmd_flips, "crafts": _cmd_crafts,
     "item": _cmd_item, "mp": _cmd_mp, "alert": _cmd_alert,
     "ah": _cmd_ah, "brief": _cmd_brief, "status": _cmd_status,
-    "ask": _cmd_ask, "accounts": _cmd_accounts,
+    "ask": _cmd_ask, "accounts": _cmd_accounts, "lore": _cmd_lore,
 }
 
 
@@ -651,6 +665,8 @@ def main(argv: list[str] | None = None) -> int:
     elif not argv:
         argv = ["plan"]
     args = parser.parse_args(argv)
+    if getattr(args, "serious", False):
+        flair.set_serious(True)
     if args.command is None:
         parser.print_help()
         return 0

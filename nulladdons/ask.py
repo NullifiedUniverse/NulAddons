@@ -25,7 +25,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from . import economy, llm, mechanics
+from . import economy, flair, llm, mechanics
 from .commands import coins, nice_name, price
 
 DONT_KNOW = "I don't know based on the current data."
@@ -236,6 +236,11 @@ def local_answer(question: str, ctx: AskContext) -> str:
 def answer(question: str, ctx: AskContext, gemini_key: str | None = None,
            model: str = llm.DEFAULT_MODEL) -> tuple[str, bool]:
     """Return (answer, produced_by_llm). Falls back to the local answerer."""
+    # Meme questions get a flavour reply (never fabricated market data). Off in
+    # serious mode. Real market questions never match these.
+    egg = flair.easter_egg(question)
+    if egg is not None:
+        return egg, False
     facts = build_facts(ctx)
     if gemini_key:
         prompt = f"{facts}\n\nQUESTION: {question.strip()}"

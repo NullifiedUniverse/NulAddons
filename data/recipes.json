@@ -1,5 +1,6 @@
 {
   "_comment": "Craft-flip recipes for Null's Addons. Quantities follow SkyBlock's standard 160:1 enchant/compact ratio. Product ids must match the Hypixel Bazaar exactly (note the legacy id INK_SACK:4 for Lapis). The engine validates every id against the live market and prices each craft from live buy/sell prices, so any bad id simply prices out and is skipped.",
+  "_vibe": "160 of something = 1 fancier something. the entire SkyBlock economy, ladies and gents. (yes we know sugar cane isn't here — it burned us once, never again.)",
   "recipes": [
     {"output": "ENCHANTED_DIAMOND",             "inputs": [["DIAMOND", 160]]},
     {"output": "ENCHANTED_DIAMOND_BLOCK",       "inputs": [["ENCHANTED_DIAMOND", 160]]},

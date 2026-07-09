@@ -11,7 +11,7 @@ always produces something useful.
 
 from __future__ import annotations
 
-from . import llm
+from . import flair, llm
 from .commands import coins, minutes, nice_name
 
 
@@ -140,11 +140,11 @@ def summarize(ctx: dict, gemini_key: str | None, model: str) -> tuple[str, bool]
 def render_brief(ctx: dict, summary_text: str, via_llm: bool) -> str:
     acc = ctx["account"]
     date = (ctx.get("stats") or {}).get("date", "today")
-    out = [
-        "═" * 68,
-        f" NULL'S ADDONS · SKYBLOCK DAILY BRIEF — {acc.name} · {date}",
-        "═" * 68,
-    ]
+    out = ["═" * 68, f" NULL'S ADDONS · SKYBLOCK DAILY BRIEF — {acc.name} · {date}"]
+    _tag = flair.tagline()
+    if _tag:
+        out.append(f" \"{_tag}\"")
+    out.append("═" * 68)
     s = ctx.get("stats")
     if s:
         out.append(f" {coins(s['coins'])} coins · skill avg "

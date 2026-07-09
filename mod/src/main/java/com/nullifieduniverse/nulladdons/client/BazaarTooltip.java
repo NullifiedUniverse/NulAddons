@@ -1,5 +1,6 @@
 package com.nullifieduniverse.nulladdons.client;
 
+import com.nullifieduniverse.nulladdons.core.Flair;
 import com.nullifieduniverse.nulladdons.core.Flip;
 import com.nullifieduniverse.nulladdons.core.Format;
 import com.nullifieduniverse.nulladdons.net.BazaarClient;
@@ -46,6 +47,8 @@ public final class BazaarTooltip {
         if (flip.coinsPerHour > 0) {
             line += " §7· §b" + Format.coins(flip.coinsPerHour) + "§7/hr";
         }
+        String hype = Flair.crackedLabel(flip.margin);
+        if (!hype.isEmpty()) line += " " + hype;
         tip.add(line);
         if (flip.unitProfit <= 0) {
             tip.add(" §cSpread doesn't cover the tax right now.");

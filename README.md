@@ -464,6 +464,17 @@ movers among liquid items (`📈 Ice Bait +42%  ·  📉 Raw Fish −18%`) — a
 signal for event spikes, pumps and manipulation.  It deepens the more you run the
 tool.
 
+## Vibes (and how to turn them off)
+
+Null's Addons has a mouth on it. Headers get taglines, empty results roast you
+gently, `--risk yolo` and `--risk scared` are real, and `ask` has opinions about
+whether it's sentient. There's a hidden `nulladdons lore` command and a few other
+things to dig up. **The numbers are never a joke** — flair only ever lives in the
+chrome, and `ask` still says *"I don't know"* rather than make anything up.
+
+Hate fun? `--serious` (or `NULLADDONS_SERIOUS=1`) mutes all of it for clean,
+neutral output. Respect.
+
 ## Command reference
 
 | Command | Does |
