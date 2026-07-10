@@ -14,6 +14,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   marker (PEP 561), and a Ruff lint configuration.
 
 ### Added
+- **In-game `/nulladdons help`** plus QoL chat commands — `tooltip`, `count <1-10>`,
+  and `move <x> <y>` — on the Fabric build, and a **new `/nulladdons` chat command
+  for the Forge 1.8.9 build** (help/hud/tooltip/count/move), which previously only
+  had the `N` keybind.
+- **Smoother macOS builds**: `build.sh` now auto-selects the right JDK per mod via
+  `/usr/libexec/java_home` (JDK 21 for Fabric, JDK 8 for Forge), adds a
+  `./build.sh run` dev-client target, and BUILD.md gains a macOS/Apple-Silicon
+  section (Homebrew Temurin, `mods` folder path, the Forge‑on‑arm note).
 - **Opt-in telemetry & personal stats** (`nulladdons/telemetry.py`, the
   `telemetry` command): a local-first, **off-by-default** stats log that powers a
   dashboard, a "SkyBlock **Wrapped**" recap, and ~24 unlockable achievements.

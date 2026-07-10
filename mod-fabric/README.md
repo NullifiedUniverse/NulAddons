@@ -72,9 +72,15 @@ tweak in the thin `fabric/` layer only — the `core` engine is unaffected.
 
 ## Commands
 
+Type `/nulladdons help` in game for the full list (or press **N** to toggle the HUD).
+
 ```
+/nulladdons help                show every command
 /nulladdons hud                 toggle the HUD
+/nulladdons tooltip             toggle Bazaar tooltip numbers
 /nulladdons craft               toggle craft-flip tooltips
+/nulladdons count <1-10>        how many flips the HUD shows
+/nulladdons move <x> <y>        reposition the HUD panel
 /nulladdons telemetry on|off|status
 /nulladdons feedback <message>  send feedback (see TELEMETRY.md)
 ```

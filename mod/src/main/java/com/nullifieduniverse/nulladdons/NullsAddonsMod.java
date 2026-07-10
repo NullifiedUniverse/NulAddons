@@ -2,9 +2,11 @@ package com.nullifieduniverse.nulladdons;
 
 import com.nullifieduniverse.nulladdons.client.BazaarTooltip;
 import com.nullifieduniverse.nulladdons.client.HudOverlay;
+import com.nullifieduniverse.nulladdons.client.NullsCommand;
 import com.nullifieduniverse.nulladdons.client.NullsConfig;
 import com.nullifieduniverse.nulladdons.client.NullsKeybinds;
 import com.nullifieduniverse.nulladdons.net.BazaarClient;
+import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
@@ -36,6 +38,7 @@ public class NullsAddonsMod {
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         NullsKeybinds.register();
+        ClientCommandHandler.instance.registerCommand(new NullsCommand());  // /nulladdons
         MinecraftForge.EVENT_BUS.register(new HudOverlay());
         MinecraftForge.EVENT_BUS.register(new BazaarTooltip());
         MinecraftForge.EVENT_BUS.register(new NullsKeybinds());

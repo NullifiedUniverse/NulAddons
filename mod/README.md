@@ -69,6 +69,15 @@ launch. That's it.
 * Join Hypixel and enter SkyBlock — the HUD appears (top‑left by default).
 * Press **N** to show/hide the HUD.
 * Open the **Bazaar** and hover items to see their flip numbers inline.
+* Type `/nulladdons help` for the chat commands:
+
+  ```
+  /nulladdons help             show every command
+  /nulladdons hud              toggle the HUD
+  /nulladdons tooltip          toggle Bazaar tooltip numbers
+  /nulladdons count <1-10>     how many flips the HUD shows
+  /nulladdons move <x> <y>     reposition the HUD panel
+  ```
 * Configure via **Mods → Null's Addons → Config**, or edit
   `.minecraft/config/nulladdons.cfg`:
   * `hudEnabled`, `tooltipEnabled`, `hudX`, `hudY`, `hudCount`
