@@ -8,7 +8,8 @@ on the current toolchain, with new capabilities and optional telemetry.
 ## Features
 
 * **Top‑flips HUD** (toggle **N**, or `/nulladdons hud`) — movable panel, renders
-  only in‑world on SkyBlock.
+  only in‑world on SkyBlock. Fades in on appearance and pulses its header when a
+  cracked flip is live (shared, unit‑tested `core/Anim`).
 * **Item tooltips** — hover any Bazaar‑tradable item in a SkyBlock menu to see its
   live **buy‑order / sell‑offer / margin / coins‑per‑hour**, read from the item's
   own `custom_data → ExtraAttributes.id`.

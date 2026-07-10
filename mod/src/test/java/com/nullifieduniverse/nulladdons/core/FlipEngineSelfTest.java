@@ -150,6 +150,26 @@ public final class FlipEngineSelfTest {
         check(Flair.crackedLabel(0.30).isEmpty(), "serious mode: no cracked label");
         Flair.setSerious(false);
 
+        // 13) Anim: pure presentation math for the HUD fade-in / cracked pulse.
+        near(Anim.easeOutCubic(0.0), 0.0, "ease-out at 0");
+        near(Anim.easeOutCubic(1.0), 1.0, "ease-out at 1");
+        near(Anim.easeOutCubic(-5.0), 0.0, "ease-out clamps below 0");
+        near(Anim.easeOutCubic(5.0), 1.0, "ease-out clamps above 1");
+        check(Anim.easeOutCubic(0.5) > 0.5, "ease-out leads linear at the midpoint");
+        near(Anim.fadeAlpha(0L, 260L), 0.0, "fade starts transparent");
+        near(Anim.fadeAlpha(260L, 260L), 1.0, "fade reaches opaque");
+        near(Anim.fadeAlpha(9999L, 260L), 1.0, "fade clamps to opaque");
+        near(Anim.fadeAlpha(5L, 0L), 1.0, "zero-duration fade is instant");
+        near(Anim.pulse(0L, 1400.0), 0.0, "pulse starts at 0");
+        near(Anim.pulse(700L, 1400.0), 1.0, "pulse peaks at half period");
+        double pmid = Anim.pulse(350L, 1400.0);
+        check(pmid > 0.0 && pmid < 1.0, "pulse stays within (0,1)");
+        check(Anim.withAlpha(0xFF112233, 0.5) == 0x80112233, "withAlpha halves alpha");
+        check(Anim.withAlpha(0xFF112233, 1.0) == 0xFF112233, "withAlpha(·,1) is identity");
+        check(Anim.withAlpha(0x80AABBCC, 0.0) == 0x00AABBCC, "withAlpha(·,0) clears alpha, keeps rgb");
+        near(Anim.lerp(10.0, 20.0, 0.5), 15.0, "lerp midpoint");
+        near(Anim.lerp(10.0, 20.0, 2.0), 20.0, "lerp clamps to the target");
+
         System.out.println("Null's Addons mod core: ALL " + checks + " CHECKS PASSED");
     }
 }

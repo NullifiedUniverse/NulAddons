@@ -1,5 +1,6 @@
 package com.nullifieduniverse.nulladdons.fabric;
 
+import com.nullifieduniverse.nulladdons.core.Anim;
 import com.nullifieduniverse.nulladdons.core.Flair;
 import com.nullifieduniverse.nulladdons.core.Flip;
 import com.nullifieduniverse.nulladdons.core.Format;
@@ -20,26 +21,37 @@ import java.util.List;
  */
 public final class HudOverlay implements HudRenderCallback {
 
+    private static final long FADE_MS = 260L;    // panel materialises this fast
+    private static final long PULSE_MS = 1400L;  // header shimmer period when cracked
+    private static final double CRACKED = 0.25;  // margin that earns the shimmer
+
+    /** When the panel most recently began showing (0 = hidden), for the fade-in. */
+    private long shownAt = 0L;
+
     @Override
     public void onHudRender(DrawContext context, RenderTickCounter tickCounter) {
         if (!NullsConfig.hudEnabled) return;
         MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.options.hudHidden) return;                 // respect F1
-        if (mc.currentScreen != null) return;             // not while a menu is open
-        if (!SkyblockState.onSkyblock()) return;
+        if (mc.options.hudHidden) return;                 // respect F1 (transient: keep the fade)
+        if (mc.currentScreen != null) return;             // not while a menu is open (transient)
+        if (!SkyblockState.onSkyblock()) { shownAt = 0L; return; }
 
         List<Flip> flips = BazaarClient.get().getTopFlips();
-        if (flips == null || flips.isEmpty()) return;
+        if (flips == null || flips.isEmpty()) { shownAt = 0L; return; }
 
-        draw(context, mc.textRenderer, flips);
+        long now = System.currentTimeMillis();
+        if (shownAt == 0L) shownAt = now;                 // first appearance -> start the fade
+        draw(context, mc.textRenderer, flips, now - shownAt, now);
     }
 
-    private void draw(DrawContext ctx, TextRenderer tr, List<Flip> flips) {
+    private void draw(DrawContext ctx, TextRenderer tr, List<Flip> flips, long elapsed, long now) {
         int count = Math.min(Math.max(1, NullsConfig.hudCount), flips.size());
         List<String> lines = new ArrayList<String>(count + 1);
         lines.add("§6§lNull's Addons §r§7· top flips");
+        boolean cracked = false;
         for (int i = 0; i < count; i++) {
             Flip f = flips.get(i);
+            if (f.margin >= CRACKED) cracked = true;
             String hype = Flair.crackedLabel(f.margin);
             lines.add("§f" + Format.niceName(f.productId) + " "
                     + Format.marginColor(f.margin) + Format.pct(f.margin)
@@ -55,8 +67,16 @@ public final class HudOverlay implements HudRenderCallback {
         int lineH = tr.fontHeight + 1;
         int height = lines.size() * lineH + pad * 2 - 1;
 
-        ctx.fill(x, y, x + width + pad * 2, y + height, 0x90000000);          // backdrop
-        ctx.fill(x, y, x + width + pad * 2, y + lineH + pad, 0x400062FF);     // header tint
+        double alpha = Anim.fadeAlpha(elapsed, FADE_MS);
+        int header = 0x400062FF;                          // subtle blue header tint
+        if (cracked) {                                    // gently breathe while spicy
+            int a = (int) Math.round(Anim.lerp(0x30, 0x80, Anim.pulse(now, PULSE_MS)));
+            header = (a << 24) | 0x0062FF;
+        }
+
+        // Backdrop + header fade in (text stays crisp via its own § colours).
+        ctx.fill(x, y, x + width + pad * 2, y + height, Anim.withAlpha(0x90000000, alpha));
+        ctx.fill(x, y, x + width + pad * 2, y + lineH + pad, Anim.withAlpha(header, alpha));
 
         int ty = y + pad;
         for (String s : lines) {

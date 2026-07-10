@@ -82,9 +82,11 @@ def mayor_banner(mc) -> str:
 
 def render_flip(plan: FlipPlan, index: int | None = None) -> str:
     head = f"FLIP {('#' + str(index)) if index else ''}".rstrip()
+    hype = flair.cracked_label(plan.margin)
     lines = [
         f"{head}  ·  {nice_name(plan.product_id)}"
-        f"   [confidence {plan.confidence:.0%} · {coins(plan.coins_per_hour)}/hr]",
+        f"   [confidence {plan.confidence:.0%} · {coins(plan.coins_per_hour)}/hr]"
+        + (f"   {hype}" if hype else ""),
         f"   1. BUY ORDER  {plan.quantity:,} @ {price(plan.buy_order_price)}"
         f"   → outlay {coins(plan.capital_required)}",
         f"      wait ~{minutes(plan.buy_minutes)} to fill "

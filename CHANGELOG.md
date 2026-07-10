@@ -14,6 +14,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   marker (PEP 561), and a Ruff lint configuration.
 
 ### Added
+- **Fun, animations & effects** (`nulladdons/fx.py`): a spinner while the live
+  Bazaar/election loads, an eased "slot-machine" count-up on the headline number
+  in `plan` and `status`, sparkles, and a `HOT` / `CRACKED 🔥` flair tag on juicy
+  flips (`flair.cracked_label`, parity with the mod). Everything is pure
+  presentation — a count-up always lands on the exact value — and degrades to
+  nothing when piped, under `NO_COLOR`/`TERM=dumb`, `--serious`, or the new
+  `--no-anim` / `NULLADDONS_NO_ANIM`.
+- **Mod HUD polish**: the top-flips panel fades in when it appears and its header
+  gently pulses while a cracked flip is on the board, via a new pure, unit-tested
+  `core/Anim.java` (easing, fade, pulse, ARGB alpha) shared by the Forge and
+  Fabric loaders.
 - `LICENSE` (MIT), `CHANGELOG.md`, `CONTRIBUTING.md`.
 - GitHub Actions CI: the Python test suite on 3.9–3.13, a Ruff lint job, and the
   Java engine self-test.

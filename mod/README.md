@@ -8,7 +8,9 @@ It does two things, and only when you need them:
 
 * **Top‑flips HUD** — a small, movable panel listing the best flips right now
   (`Enchanted Mithril  +15.1%  11.7M/hr`). Toggle it with **N**. It renders
-  *only* while you're actually playing on SkyBlock.
+  *only* while you're actually playing on SkyBlock. The panel fades in when it
+  appears and its header gently pulses while a genuinely *cracked* flip is on the
+  board — a nudge you can't miss, drawn with the pure, unit‑tested `core/Anim`.
 * **Bazaar tooltips** — hover any Bazaar‑tradable item in a SkyBlock menu and its
   live **buy‑order / sell‑offer / margin / coins‑per‑hour** appear under the lore,
   in native SkyBlock styling. Identity comes from the item's own

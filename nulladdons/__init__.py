@@ -27,5 +27,5 @@ __all__ = [
     # intelligence layer
     "llm", "brief", "ask",
     # interface & delivery
-    "cli", "ui", "onboarding", "notify", "flair",
+    "cli", "ui", "onboarding", "notify", "flair", "fx",
 ]

@@ -472,8 +472,17 @@ whether it's sentient. There's a hidden `nulladdons lore` command and a few othe
 things to dig up. **The numbers are never a joke** — flair only ever lives in the
 chrome, and `ask` still says *"I don't know"* rather than make anything up.
 
-Hate fun? `--serious` (or `NULLADDONS_SERIOUS=1`) mutes all of it for clean,
-neutral output. Respect.
+It also *moves* a little, when you're at a real terminal: a spinner while the
+live Bazaar loads, a slot‑machine count‑up on the headline number in `plan` and
+`status`, a `HOT`/`CRACKED 🔥` tag on juicy flips, and — in the mod — the HUD
+panel fades in and gently pulses when a cracked flip is on the board. **None of
+it touches a number**: a count‑up always lands on the exact real value, and the
+instant you pipe output to a file or another program every effect vanishes, so
+scripts see clean text.
+
+Hate fun? `--serious` (or `NULLADDONS_SERIOUS=1`) mutes the personality *and* the
+motion for clean, neutral output. Want the jokes but not the motion? `--no-anim`
+(or `NULLADDONS_NO_ANIM=1`) turns off just the animations. Respect either way.
 
 ## Command reference
 
@@ -495,7 +504,8 @@ neutral output. Respect.
 
 Common flags: `-a/--account`, `-b/--budget`, `-r/--risk`, `--hold-time`,
 `--min-margin`, `--top`, `--guaranteed`, `--live`, `--api-key`, `--webhook`,
-`--offline`, `--no-history`.  Plus `--mp-goal` (mp) and `--watch` (alert).
+`--offline`, `--no-history`, `--serious`, `--no-anim`.  Plus `--mp-goal` (mp)
+and `--watch` (alert).
 
 ### Per‑account config (`config/accounts.json`)
 

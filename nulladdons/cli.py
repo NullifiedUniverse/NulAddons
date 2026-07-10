@@ -37,6 +37,7 @@ from . import (
     economy,
     flair,
     flip,
+    fx,
     hypixel,
     llm,
     mayor,
@@ -66,6 +67,8 @@ def _add_common(p: argparse.ArgumentParser) -> None:
                    help="override risk profile: conservative / balanced / aggressive")
     p.add_argument("--serious", action="store_true",
                    help="disable the personality/flair — clean, neutral output")
+    p.add_argument("--no-anim", action="store_true",
+                   help="disable terminal animations/effects (spinners, count-ups)")
     p.add_argument("--hold-time", type=float, default=None,
                    help="max minutes you're willing to wait for a round-trip")
     p.add_argument("--min-margin", type=float, default=None,
@@ -181,7 +184,8 @@ def _load_market(args) -> tuple[Market, PriceHistory | None]:
         # Live is mandatory for real trading. Fail loudly rather than trade on
         # stale data.
         try:
-            payload = hypixel.fetch_bazaar()
+            with fx.spinner("Fetching the live Bazaar"):
+                payload = hypixel.fetch_bazaar()
         except hypixel.HypixelError as exc:
             print(f"! live Bazaar fetch failed: {exc}", file=sys.stderr)
             print("  check your connection, or pass --offline to demo on the "
@@ -229,7 +233,9 @@ def _mayor_context(args):
     if getattr(args, "offline", None):
         return None
     try:
-        return mayor.build_context(hypixel.fetch_resource("election"))
+        with fx.spinner("Checking the mayor election"):
+            election = hypixel.fetch_resource("election")
+        return mayor.build_context(election)
     except Exception:
         return None
 
@@ -261,11 +267,32 @@ def _build_account(args):
     return ctx, config
 
 
+def _hero_number(value: float, phrase: str, tail: str = "") -> None:
+    """A sparkly, animated 'hero' number printed above a plan/dashboard.
+
+    ``phrase`` is the text the number lands after (e.g. 'this session could net
+    ~'). This is a pure bonus for interactive terminals -- the very same number
+    appears in the static block below -- so when effects are off (piped,
+    ``--serious``, ``--no-anim``) we skip it entirely and leave the output
+    byte-for-byte as it was.
+    """
+    if value <= 0 or not fx.enabled():
+        return
+    s = fx.sparkle(seed=int(value))
+    left = f"{s} " if s else ""
+    right = f" {s}" if s else ""
+    fx.count_up(value, fmt=commands.coins, color="green",
+                label=f"  {left}{phrase}", suffix=f"{tail}{right}")
+
+
 def _cmd_plan(args):
     market, history = _load_market(args)
     ctx, _ = _build_account(args)
     recipes = craft.load_recipes(args.recipes)
     portfolio = commands.build_portfolio(ctx, market, recipes, history)
+    if portfolio:
+        _hero_number(sum(p.total_profit for p in portfolio),
+                     "this session could net ~")
     print(commands.render_portfolio(ctx, portfolio))
     if args.webhook and portfolio:
         ok = notify.post_webhook(
@@ -523,6 +550,9 @@ def _cmd_status(args):
     _, prog_diff, uuid = _load_progress(ctx, api_key, save=False)
     ah = _ah_context(ctx, api_key, uuid)
     movers = _market_movers(market, history)
+    if portfolio:
+        proj = projection.project_bazaar_income(portfolio, ctx.active_hours)
+        _hero_number(proj.per_day, "projected income ~", tail="/day")
     out = commands.render_status(ctx, portfolio, mp_plan, ah, prog_diff, movers)
     print(out)
     if args.webhook:
@@ -685,6 +715,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if getattr(args, "serious", False):
         flair.set_serious(True)
+    if getattr(args, "no_anim", False):
+        os.environ["NULLADDONS_NO_ANIM"] = "1"   # fx reads this to stay silent
     if args.command is None:
         parser.print_help()
         return 0

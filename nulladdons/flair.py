@@ -70,6 +70,24 @@ def tagline(seed: int | None = None) -> str:
     return pick(TAGLINES, seed)
 
 
+# --- cracked-flip hype label (parity with the mod's core Flair) -------------
+
+def cracked_label(margin: float) -> str:
+    """A hype tag for how juicy a margin is: 'CRACKED 🔥' / 'HOT', or "".
+
+    Mirrors the mod's ``Flair.crackedLabel`` tiers (0.25 / 0.12) so the terminal
+    and the in-game HUD speak the same language. Pure flavor -- it reads the
+    margin, it never changes it -- and empty in serious mode.
+    """
+    if serious():
+        return ""
+    if margin >= 0.25:
+        return "CRACKED 🔥"
+    if margin >= 0.12:
+        return "HOT"
+    return ""
+
+
 # --- sarcastic empty states -------------------------------------------------
 
 _EMPTY_FLIPS = [
