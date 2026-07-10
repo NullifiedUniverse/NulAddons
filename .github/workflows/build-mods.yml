@@ -1,0 +1,51 @@
+name: Build Mods
+
+# Produces downloadable mod jars. Runs on demand and on version tags, NOT on
+# every push, so the main CI stays green even though the 1.8.9 Forge toolchain
+# (ForgeGradle 2.1) is famously finicky in CI.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  fabric:
+    name: Fabric 1.21 (JDK 21)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Build
+        working-directory: mod-fabric
+        run: ./gradlew --no-daemon --console=plain build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nulladdons-fabric-1.21
+          path: mod-fabric/build/libs/*.jar
+          if-no-files-found: warn
+
+  forge:
+    name: Forge 1.8.9 (JDK 8)
+    runs-on: ubuntu-latest
+    # ForgeGradle 2.1 on modern CI can be temperamental; don't fail the run over it.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+      - name: Build
+        working-directory: mod
+        run: ./gradlew --no-daemon --console=plain build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nulladdons-forge-1.8.9
+          path: mod/build/libs/*.jar
+          if-no-files-found: warn

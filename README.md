@@ -484,6 +484,56 @@ Hate fun? `--serious` (or `NULLADDONS_SERIOUS=1`) mutes the personality *and* th
 motion for clean, neutral output. Want the jokes but not the motion? `--no-anim`
 (or `NULLADDONS_NO_ANIM=1`) turns off just the animations. Respect either way.
 
+## Make it yours: flavors & features
+
+Same honest numbers, your voice. Pick a **flavor** and the taglines change
+personality:
+
+| Flavor | Voice |
+|---|---|
+| `gremlin` | edgy, chronically online (default) |
+| `zen` | calm, mindful, suspiciously peaceful |
+| `wallstreet` | finance-bro, "provides liquidity" |
+| `speedrunner` | PB-obsessed, resets the market |
+| `pirate` | arr, thar be spread in these waters |
+
+Set it per run with `--flavor pirate`, for the shell with `NULLADDONS_FLAVOR`, or
+permanently in `setup`. Coarse **feature toggles** (stored in config) let you turn
+off anything you don't want: `animations`, `easter_eggs`, `market_movers`,
+`mayor`, and `telemetry`. `setup` walks you through all of it.
+
+## Telemetry & your stats — opt-in, local, and honestly kind of fun 🎁
+
+Null's Addons can keep a **personal stats log** of how you play — and it is
+**OFF by default**. Nothing is recorded, and no file is created, until you turn
+it on:
+
+```bash
+nulladdons telemetry manifest   # see EXACTLY what it would collect, and where
+nulladdons telemetry on         # opt in (writes to ~/.nulladdons/telemetry/)
+```
+
+Once on, every command appends one compact JSON line locally. Then:
+
+```bash
+nulladdons telemetry stats          # dashboard: favorite commands, grind clock, records
+nulladdons telemetry wrapped        # your "SkyBlock Wrapped" recap 🎁
+nulladdons telemetry achievements   # ~24 unlockable badges (Whale Watcher, Tax Evader, …)
+nulladdons telemetry export         # portable JSONL, take your data anywhere
+nulladdons telemetry off            # stop recording   ·   clear = wipe the log
+```
+
+The rules, up front and enforced by tests:
+
+- **Off by default**, and it's a real second opt-in — turning it on is the only
+  way anything is written.
+- **No PII**: no usernames, no UUIDs, no API keys, and never the *text* of a
+  question you `ask` — only its category. `telemetry manifest` lists every field.
+- **Local only**, unless *you* additionally set `telemetry.sink_url`, in which
+  case the same line is POSTed there so you can pipe your stats wherever you like.
+- It only ever records *presentation* facts about your runs — it can't and
+  doesn't change a single price or recommendation.
+
 ## Command reference
 
 | Command | Does |
@@ -501,11 +551,12 @@ motion for clean, neutral output. Want the jokes but not the motion? `--no-anim`
 | `item <ID>` | Deep dive: book, spread, liquidity, flip economics, confidence breakdown. |
 | `alert` | Post crucial opportunities to Discord (optionally `--watch`). |
 | `accounts` | List configured accounts (with live capital if `--live`). |
+| `telemetry` | Opt-in local stats, SkyBlock **Wrapped** & achievements: `on`/`off`/`manifest`/`stats`/`wrapped`/`achievements`/`export`/`clear`. |
 
 Common flags: `-a/--account`, `-b/--budget`, `-r/--risk`, `--hold-time`,
 `--min-margin`, `--top`, `--guaranteed`, `--live`, `--api-key`, `--webhook`,
-`--offline`, `--no-history`, `--serious`, `--no-anim`.  Plus `--mp-goal` (mp)
-and `--watch` (alert).
+`--offline`, `--no-history`, `--serious`, `--no-anim`, `--flavor`.  Plus
+`--mp-goal` (mp) and `--watch` (alert).
 
 ### Per‑account config (`config/accounts.json`)
 
@@ -598,10 +649,15 @@ takes realistically longer — which flows straight through to position sizing.
 * **License:** [MIT](LICENSE) — free to use, modify, and share.
 * **Contributing:** see [CONTRIBUTING.md](CONTRIBUTING.md) for the golden rules
   (numbers stay honest, the tool stays advisory) and how to run the tests.
+* **Building the mod:** [BUILD.md](BUILD.md) — grab a prebuilt jar, or run
+  `./build.sh` (each mod ships a Gradle wrapper, so no Gradle install needed).
 * **Changelog:** [CHANGELOG.md](CHANGELOG.md).
-* **Tests:** `python3 -m unittest discover -s tests` (87 Python tests) plus a
-  standalone Java self-test for the mod core (44 checks). CI runs both on every
+* **Tests:** `python3 -m unittest discover -s tests` (131 Python tests) plus a
+  standalone Java self-test for the mod core (61 checks). CI runs both on every
   push.
+* **Fast where it counts:** `status` fetches the Bazaar, the mayor election, and
+  the ended-auctions feed *concurrently* (`tasks.gather`), collapsing three
+  network round-trips into about one.
 
 Null's Addons is an unofficial, fan‑made tool. It is not affiliated with,
 endorsed by, or associated with Hypixel Inc. or Mojang/Microsoft.

@@ -234,11 +234,14 @@ def local_answer(question: str, ctx: AskContext) -> str:
 # --- orchestration ----------------------------------------------------------
 
 def answer(question: str, ctx: AskContext, gemini_key: str | None = None,
-           model: str = llm.DEFAULT_MODEL) -> tuple[str, bool]:
-    """Return (answer, produced_by_llm). Falls back to the local answerer."""
+           model: str = llm.DEFAULT_MODEL, allow_eggs: bool = True) -> tuple[str, bool]:
+    """Return (answer, produced_by_llm). Falls back to the local answerer.
+
+    ``allow_eggs`` lets the caller honour the ``easter_eggs`` feature toggle; eggs
+    are also always off in serious mode."""
     # Meme questions get a flavour reply (never fabricated market data). Off in
     # serious mode. Real market questions never match these.
-    egg = flair.easter_egg(question)
+    egg = flair.easter_egg(question) if allow_eggs else None
     if egg is not None:
         return egg, False
     facts = build_facts(ctx)

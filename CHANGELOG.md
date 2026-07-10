@@ -14,6 +14,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   marker (PEP 561), and a Ruff lint configuration.
 
 ### Added
+- **Opt-in telemetry & personal stats** (`nulladdons/telemetry.py`, the
+  `telemetry` command): a local-first, **off-by-default** stats log that powers a
+  dashboard, a "SkyBlock **Wrapped**" recap, and ~24 unlockable achievements.
+  Turning it on is a real second opt-in; the schema is documented in a
+  `manifest` and carries no PII (no usernames/UUIDs/keys, never question text).
+  Data stays on your machine unless you additionally set `telemetry.sink_url`.
+  It only records presentation facts and can't change a number.
+- **Flavors & feature toggles** (`nulladdons/features.py`, `--flavor`): pick the
+  tool's voice — `gremlin` (default), `zen`, `wallstreet`, `speedrunner`,
+  `pirate` — and turn coarse features (`animations`, `easter_eggs`,
+  `market_movers`, `mayor`, `telemetry`) on/off in config. Resolution is
+  override → env → config → default.
+- **Parallel task scheduler** (`nulladdons/tasks.py`): `status` now fetches the
+  Bazaar, mayor election, and ended-auctions feed concurrently with per-task
+  error isolation, collapsing three sequential round-trips into ~one.
+- **Trivial mod builds**: committed Gradle wrappers for both mods (no Gradle
+  install needed), a `build.sh` / `build.bat`, a `BUILD.md`, and a **Build Mods**
+  CI workflow that uploads downloadable jars.
+- A richer `setup` wizard: it now walks you through flavor, feature toggles, and
+  the telemetry consent (showing the full manifest first).
 - **Fun, animations & effects** (`nulladdons/fx.py`): a spinner while the live
   Bazaar/election loads, an eased "slot-machine" count-up on the headline number
   in `plan` and `status`, sparkles, and a `HOT` / `CRACKED 🔥` flair tag on juicy

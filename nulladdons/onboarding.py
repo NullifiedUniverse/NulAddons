@@ -19,7 +19,7 @@ from __future__ import annotations
 import os
 
 from . import accounts as accountsmod
-from . import hypixel, llm, notify, ui
+from . import features, hypixel, llm, notify, telemetry, ui
 from .accounts import RISK_PROFILES
 
 HYPIXEL_KEY_URL = "https://developer.hypixel.net"
@@ -56,6 +56,25 @@ def apply_globals(cfg: dict, *, hypixel_api_key=None, gemini_api_key=None,
     if gemini_model:
         cfg["gemini_model"] = gemini_model
     cfg["discord_webhook_url"] = discord_webhook_url or None
+    return cfg
+
+
+def apply_preferences(cfg: dict, *, flavor: str | None = None,
+                      feature_overrides: dict | None = None,
+                      telemetry_enabled: bool | None = None,
+                      telemetry_sink: str | None = None) -> dict:
+    """Set the flavor, feature toggles and telemetry choice (mutates & returns)."""
+    if flavor:
+        cfg["flavor"] = features.normalize_flavor(flavor)
+    feats = cfg.setdefault("features", features.default_features())
+    for name, value in (feature_overrides or {}).items():
+        if name in features.FEATURES:
+            feats[name] = bool(value)
+    if telemetry_enabled is not None:
+        feats["telemetry"] = bool(telemetry_enabled)
+    tel = cfg.setdefault("telemetry", {})
+    if telemetry_sink is not None:
+        tel["sink_url"] = telemetry_sink or None
     return cfg
 
 
@@ -106,6 +125,8 @@ def run_setup(config_path: str | None = None) -> tuple[dict, str]:
             break
         add = ui.ask_yes_no("Add another account?", False)
 
+    _setup_preferences(cfg)
+
     # --- save ---------------------------------------------------------------
     path = accountsmod.save_config(cfg, target)
     ui.section("All set")
@@ -118,6 +139,38 @@ def run_setup(config_path: str | None = None) -> tuple[dict, str]:
     else:
         ui.info("No accounts yet — re-run `nulladdons setup` to add one.")
     return cfg, path
+
+
+def _setup_preferences(cfg: dict) -> None:
+    """Interactive: pick a flavor, toggle features, and make the telemetry call."""
+    ui.section("Personality & features")
+    ui.info("Pick a flavor — same honest numbers, totally different voice:")
+    for fid in features.flavor_ids():
+        ui.info(f"  {fid:<12} {features.flavor_label(fid)}")
+    flavor = ui.ask_choice("Flavor", features.flavor_ids(),
+                           cfg.get("flavor") or features.DEFAULT_FLAVOR)
+
+    ui.info("Toggle features (Enter keeps the current default):")
+    overrides = {}
+    for name in ("animations", "easter_eggs", "market_movers", "mayor"):
+        overrides[name] = ui.ask_yes_no(
+            f"  Enable {name} — {features.describe(name)}?",
+            features.enabled(name, cfg))
+
+    ui.section("Telemetry — opt-in, local, and honestly kind of fun")
+    ui.info("It's OFF by default and this is exactly what it would collect:")
+    print(telemetry.manifest_text(cfg))
+    tel_on = ui.ask_yes_no("Turn on local telemetry, stats & SkyBlock Wrapped?", False)
+    sink = None
+    if tel_on and ui.ask_yes_no(
+            "Advanced: also POST each event to a URL you control? (default no)", False):
+        sink = ui.ask("Telemetry sink URL", "") or None
+
+    apply_preferences(cfg, flavor=flavor, feature_overrides=overrides,
+                      telemetry_enabled=tel_on, telemetry_sink=sink)
+    ui.ok(f"Flavor set to {flavor}."
+          + ("  Telemetry ON — see `nulladdons telemetry`." if tel_on
+             else "  Telemetry left OFF."))
 
 
 def _setup_one_account(cfg: dict, hkey: str | None) -> bool:

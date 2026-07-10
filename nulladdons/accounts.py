@@ -70,9 +70,13 @@ GEMINI_DEFAULT_MODEL = "gemini-2.5-flash"
 
 
 def default_config() -> dict:
+    from . import features  # local import: features is presentation-only
     return {"accounts": {}, "hypixel_api_key": None, "gemini_api_key": None,
             "gemini_model": GEMINI_DEFAULT_MODEL, "discord_webhook_url": None,
-            "alert": {}}
+            "alert": {},
+            "flavor": features.DEFAULT_FLAVOR,
+            "features": features.default_features(),
+            "telemetry": {"sink_url": None}}
 
 
 def config_path() -> str:

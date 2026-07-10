@@ -26,6 +26,8 @@ __all__ = [
     "accounts", "progress", "commands",
     # intelligence layer
     "llm", "brief", "ask",
+    # workflows, personalization & instrumentation
+    "tasks", "features", "telemetry",
     # interface & delivery
     "cli", "ui", "onboarding", "notify", "flair", "fx",
 ]

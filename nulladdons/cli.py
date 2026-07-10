@@ -35,6 +35,7 @@ from . import (
     commands,
     craft,
     economy,
+    features,
     flair,
     flip,
     fx,
@@ -46,6 +47,8 @@ from . import (
     onboarding,
     progress,
     projection,
+    tasks,
+    telemetry,
     ui,
 )
 from . import brief as briefmod
@@ -69,6 +72,8 @@ def _add_common(p: argparse.ArgumentParser) -> None:
                    help="disable the personality/flair — clean, neutral output")
     p.add_argument("--no-anim", action="store_true",
                    help="disable terminal animations/effects (spinners, count-ups)")
+    p.add_argument("--flavor", default=None, metavar="NAME",
+                   help="personality flavor: " + " / ".join(features.flavor_ids()))
     p.add_argument("--hold-time", type=float, default=None,
                    help="max minutes you're willing to wait for a round-trip")
     p.add_argument("--min-margin", type=float, default=None,
@@ -113,6 +118,18 @@ def build_parser() -> argparse.ArgumentParser:
     # Undocumented on purpose: no help text, so it stays out of the detailed
     # command list but still peeks from the usage line -- a little something to find.
     sub.add_parser("lore")
+
+    tp = sub.add_parser("telemetry",
+                        help="opt-in local stats, SkyBlock Wrapped & achievements")
+    tp.add_argument("action", nargs="?", default="status",
+                    choices=["status", "on", "off", "manifest", "stats", "wrapped",
+                             "achievements", "export", "clear"],
+                    help="status (default) · on · off · manifest · stats · wrapped "
+                         "· achievements · export · clear")
+    tp.add_argument("--path", default=None,
+                    help="destination file for `telemetry export`")
+    tp.add_argument("--yes", action="store_true",
+                    help="skip the confirmation for `telemetry clear`")
 
     for name, help_ in (("plan", "diversified session plan (default)"),
                         ("flips", "ranked order flips"),
@@ -169,7 +186,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _load_market(args) -> tuple[Market, PriceHistory | None]:
+def _load_market(args, payload=None) -> tuple[Market, PriceHistory | None]:
     offline = getattr(args, "offline", None)
     if offline:
         # Explicit offline mode: use a snapshot, but never silently.
@@ -180,6 +197,14 @@ def _load_market(args) -> tuple[Market, PriceHistory | None]:
         market = Market.from_api(payload)
         print(f"⚠ OFFLINE MODE — snapshot {os.path.basename(offline)}; prices "
               f"are NOT live. Drop --offline for real trading.", file=sys.stderr)
+    elif payload is not None:
+        # Already fetched (e.g. by the parallel prefetch): reuse it.
+        market = Market.from_api(payload)
+        age = market.age_seconds()
+        age_txt = f"{age:.0f}s ago" if age is not None else "unknown"
+        note = "  ⚠ STALE" if market.is_stale() else ""
+        print(f"· live Bazaar — updated {age_txt}, {len(market)} products{note}",
+              file=sys.stderr)
     else:
         # Live is mandatory for real trading. Fail loudly rather than trade on
         # stale data.
@@ -226,15 +251,20 @@ def _resolve_account_name(args, config) -> str:
     return requested
 
 
-def _mayor_context(args):
-    """The active (or simulated) SkyBlock mayor, or None when offline."""
+def _mayor_context(args, config=None, election=None):
+    """The active (or simulated) SkyBlock mayor, or None.
+
+    ``--mayor`` always wins (explicit simulation). Otherwise honours the ``mayor``
+    feature toggle and skips the fetch offline. ``election`` may be pre-fetched by
+    the parallel prefetch so we don't hit the network twice."""
     if getattr(args, "mayor", None):
         return mayor.simulate(args.mayor)
-    if getattr(args, "offline", None):
+    if getattr(args, "offline", None) or not features.enabled("mayor", config):
         return None
     try:
-        with fx.spinner("Checking the mayor election"):
-            election = hypixel.fetch_resource("election")
+        if election is None:
+            with fx.spinner("Checking the mayor election"):
+                election = hypixel.fetch_resource("election")
         return mayor.build_context(election)
     except Exception:
         return None
@@ -261,9 +291,11 @@ def _build_account(args):
         ctx.params.min_margin = max(ctx.params.min_margin, 0.03)
         ctx.params.require_instant_profit = True
     # Fold the live game macro-economy (the Mayor) into the tax.
-    ctx.mayor = _mayor_context(args)
+    ctx.mayor = _mayor_context(args, config, election=getattr(args, "_election", None))
     if ctx.mayor is not None:
         ctx.params.tax *= ctx.mayor.tax_multiplier
+        telemetry.annotate(mayor=ctx.mayor.name, tax_free=bool(ctx.mayor.tax_free))
+    telemetry.annotate(risk=ctx.risk)
     return ctx, config
 
 
@@ -291,8 +323,11 @@ def _cmd_plan(args):
     recipes = craft.load_recipes(args.recipes)
     portfolio = commands.build_portfolio(ctx, market, recipes, history)
     if portfolio:
-        _hero_number(sum(p.total_profit for p in portfolio),
-                     "this session could net ~")
+        total = sum(p.total_profit for p in portfolio)
+        telemetry.annotate(results=len(portfolio), positions=len(portfolio),
+                           projected_profit=total, capital=ctx.budget,
+                           top_margin=max((p.margin for p in portfolio), default=None))
+        _hero_number(total, "this session could net ~")
     print(commands.render_portfolio(ctx, portfolio))
     if args.webhook and portfolio:
         ok = notify.post_webhook(
@@ -306,6 +341,10 @@ def _cmd_flips(args):
     ctx, _ = _build_account(args)
     plans = flip.find_flips(market, ctx.params, ctx.budget, history, limit=args.top,
                             blacklist=ctx.blacklist, whitelist=ctx.whitelist)
+    telemetry.annotate(
+        results=len(plans), capital=ctx.budget,
+        top_margin=max((p.margin for p in plans), default=None),
+        top_coins_per_hour=max((p.coins_per_hour for p in plans), default=None))
     print(f"Top {len(plans)} order flips — {ctx.summary()}")
     if ctx.mayor is not None:
         print(commands.mayor_banner(ctx.mayor))
@@ -325,6 +364,10 @@ def _cmd_crafts(args):
     plans = craft.find_crafts(market, recipes, ctx.params, ctx.budget, history,
                               ctx.allowed_outputs, limit=args.top,
                               blacklist=ctx.blacklist, whitelist=ctx.whitelist)
+    telemetry.annotate(
+        results=len(plans), capital=ctx.budget,
+        top_margin=max((p.margin for p in plans), default=None),
+        top_coins_per_hour=max((p.coins_per_hour for p in plans), default=None))
     print(f"Top {len(plans)} craft flips — {ctx.summary()}")
     if ctx.mayor is not None:
         print(commands.mayor_banner(ctx.mayor))
@@ -348,6 +391,7 @@ def _cmd_item(args):
         if alt:
             print("Did you mean:", ", ".join(alt))
         return
+    telemetry.annotate(item=args.product_id)
     econ = mechanics.flip_unit_economics(product.best_bid, product.best_ask,
                                          ctx.params.tax)
     print(f"{commands.nice_name(product.product_id)}  ({product.product_id})")
@@ -396,6 +440,10 @@ def _cmd_mp(args):
         mp_goal=goal, budget=mp_budget, top=args.top)
     # Reflect the goal in the header even if it came from the flag.
     ctx.mp_goal = goal or ctx.mp_goal
+    picks = plan.get("picks") or []
+    if picks:
+        telemetry.annotate(mp_gain=getattr(picks[0], "mp_gain", None),
+                           mp_cost=getattr(picks[0], "cost", None))
     print(commands.render_mp_plan(ctx, plan))
 
 
@@ -467,9 +515,11 @@ def _load_progress(ctx, api_key, save: bool):
     return stats, prog_diff, uuid
 
 
-def _ah_context(ctx, api_key, uuid, top_sales: int = 3):
+def _ah_context(ctx, api_key, uuid, top_sales: int = 3, ended=None):
     """Assemble Auction House highlights: recent sales + your listings."""
-    sales = auction.sales_from_ended(hypixel.fetch_auctions_ended())
+    if ended is None:
+        ended = hypixel.fetch_auctions_ended()
+    sales = auction.sales_from_ended(ended)
     auction.record_sales(sales)
     recent = [(s["id"], s["price"])
               for s in sorted(sales, key=lambda x: x["price"], reverse=True)[:top_sales]]
@@ -531,7 +581,15 @@ def _cmd_ask(args):
     if args.show_facts:
         print(askmod.build_facts(ac))
         print("─" * 60)
-    text, via_llm = askmod.answer(question, ac, gem_key, gem_model)
+    allow_eggs = features.enabled("easter_eggs", config)
+    text, via_llm = askmod.answer(question, ac, gem_key, gem_model,
+                                  allow_eggs=allow_eggs)
+    answered = text != askmod.DONT_KNOW and not text.startswith(askmod.DONT_KNOW)
+    telemetry.annotate(
+        ask_answered=answered,
+        easter_egg=bool(allow_eggs and flair.easter_egg(question)),
+        ask_intent=("meme" if allow_eggs and flair.easter_egg(question)
+                    else "item" if items else "market"))
     tag = "Gemini, grounded in live data" if via_llm else "local answer from live data"
     print(text)
     print(ui.c(f"\n[{tag}]", "grey"))
@@ -540,18 +598,42 @@ def _cmd_ask(args):
                    "questions.", "grey"), file=sys.stderr)
 
 
+def _prefetch_public(args, config):
+    """Fetch the independent public endpoints for `status` concurrently.
+
+    Bazaar, election and ended-auctions don't depend on each other, so running
+    them in parallel turns three sequential round-trips into ~one. Returns
+    ``{bazaar, election, ended}`` (values may be None on failure/offline; callers
+    fall back to their own sequential fetch)."""
+    if getattr(args, "offline", None):
+        return {}
+    jobs = {"bazaar": hypixel.fetch_bazaar,
+            "ended": hypixel.fetch_auctions_ended}
+    if features.enabled("mayor", config) and not getattr(args, "mayor", None):
+        jobs["election"] = lambda: hypixel.fetch_resource("election")
+    with fx.spinner(f"Fetching {len(jobs)} live feeds in parallel"):
+        results = tasks.gather(jobs)
+    return tasks.values(results)
+
+
 def _cmd_status(args):
-    market, history = _load_market(args)
+    config = accountsmod.load_config()
+    pre = _prefetch_public(args, config)
+    if pre.get("election") is not None:
+        args._election = pre["election"]          # reused by _build_account
+    market, history = _load_market(args, payload=pre.get("bazaar"))
     ctx, config = _build_account(args)
     api_key = args.api_key or config.get("hypixel_api_key")
     recipes = craft.load_recipes(args.recipes)
     portfolio = commands.build_portfolio(ctx, market, recipes, history)
     mp_plan = _mp_plan_for(ctx, market, args.accessories, recipes)
     _, prog_diff, uuid = _load_progress(ctx, api_key, save=False)
-    ah = _ah_context(ctx, api_key, uuid)
-    movers = _market_movers(market, history)
+    ah = _ah_context(ctx, api_key, uuid, ended=pre.get("ended"))
+    movers = _market_movers(market, history) if features.enabled("market_movers", config) else []
     if portfolio:
         proj = projection.project_bazaar_income(portfolio, ctx.active_hours)
+        telemetry.annotate(positions=proj.positions, capital=ctx.budget,
+                           projected_profit=proj.per_day)
         _hero_number(proj.per_day, "projected income ~", tail="/day")
     out = commands.render_status(ctx, portfolio, mp_plan, ah, prog_diff, movers)
     print(out)
@@ -664,6 +746,74 @@ def _cmd_lore(args):
     print(flair.lore())
 
 
+def _telemetry_set(config: dict, value: bool) -> int:
+    config.setdefault("features", {})["telemetry"] = value
+    path = accountsmod.save_config(config)
+    if value:
+        print(ui.c("✓ Telemetry ON", "green", "bold")
+              + " — local stats will start recording. It never leaves your machine")
+        print(f"  unless you set telemetry.sink_url.  Config: {path}\n")
+        print(telemetry.manifest_text(config))
+    else:
+        print(ui.c("✓ Telemetry OFF", "green", "bold")
+              + " — nothing will be recorded. Your existing log is untouched;")
+        print("  wipe it any time with  nulladdons telemetry clear")
+    return 0
+
+
+def _cmd_telemetry(args):
+    config = accountsmod.load_config()
+    action = args.action
+
+    if action == "on":
+        return _telemetry_set(config, True)
+    if action == "off":
+        return _telemetry_set(config, False)
+    if action == "manifest":
+        print(telemetry.manifest_text(config))
+        return 0
+    if action == "export":
+        dest = args.path or os.path.join(os.getcwd(), "nulladdons-telemetry.jsonl")
+        try:
+            n = telemetry.export_to(dest)
+        except OSError as exc:
+            print(f"! export failed: {exc}", file=sys.stderr)
+            return 2
+        print(f"· exported {n} event(s) to {dest}" if n
+              else "· no telemetry to export yet.")
+        return 0
+    if action == "clear":
+        if not args.yes and not ui.ask_yes_no(
+                "Permanently delete your local telemetry log?", False):
+            print("· kept your data.")
+            return 0
+        print("· telemetry log wiped." if telemetry.clear()
+              else "· nothing to wipe (no log yet).")
+        return 0
+
+    # status / stats / wrapped / achievements all read the local log.
+    on = telemetry.is_enabled(config)
+    events = telemetry.load_events()
+    stats = telemetry.compute_stats(events)
+    if action == "stats":
+        print(telemetry.stats_text(stats))
+    elif action == "wrapped":
+        print(telemetry.wrapped_text(stats, features.active_flavor(config)))
+    elif action == "achievements":
+        print(telemetry.achievements_text(stats))
+    else:  # status
+        print(ui.c(f"Telemetry is {'ON' if on else 'OFF'}.",
+                   "green" if on else "yellow", "bold"))
+        if not on:
+            print("  Turn it on:   " + ui.c("nulladdons telemetry on", "cyan"))
+            print("  See exactly what it collects:  "
+                  + ui.c("nulladdons telemetry manifest", "cyan"))
+        else:
+            print(f"  Stored at {telemetry.EVENTS_PATH}\n")
+            print(telemetry.stats_text(stats))
+    return 0
+
+
 def _cmd_setup(args):
     onboarding.run_setup(config_path=args.config)
 
@@ -701,6 +851,7 @@ _DISPATCH = {
     "item": _cmd_item, "mp": _cmd_mp, "alert": _cmd_alert,
     "ah": _cmd_ah, "brief": _cmd_brief, "status": _cmd_status,
     "ask": _cmd_ask, "accounts": _cmd_accounts, "lore": _cmd_lore,
+    "telemetry": _cmd_telemetry,
 }
 
 
@@ -720,6 +871,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.command is None:
         parser.print_help()
         return 0
+
+    # Resolve global config once for flavor + telemetry (handlers reload as needed).
+    config = accountsmod.load_config()
+    flavor = features.active_flavor(config)
+    if getattr(args, "flavor", None):
+        flavor = features.normalize_flavor(args.flavor)
+    features.set_flavor(flavor)
+    if not features.enabled("animations", config):
+        os.environ["NULLADDONS_NO_ANIM"] = "1"   # feature toggle mirrors --no-anim
+
+    telemetry.take_annotations()   # start each run with a clean slate
+    started = time.monotonic()
     try:
         result = _DISPATCH[args.command](args)
     except KeyboardInterrupt:
@@ -731,7 +894,28 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError as exc:
         print(f"! missing file: {exc}", file=sys.stderr)
         return 2
+    finally:
+        _record_run(args, config, flavor, started)
     return result if isinstance(result, int) else 0
+
+
+def _record_run(args, config, flavor, started) -> None:
+    """Append one telemetry event for this run (no-op unless you opted in)."""
+    # Don't record the telemetry command itself -- checking your stats shouldn't
+    # become a stat.
+    if args.command == "telemetry" or not telemetry.is_enabled(config):
+        telemetry.take_annotations()
+        return
+    event = telemetry.build_event(
+        args.command,
+        flavor=flavor,
+        risk=getattr(args, "risk", None),
+        duration_ms=(time.monotonic() - started) * 1000.0,
+        offline=bool(getattr(args, "offline", None)),
+        serious=flair.serious(),
+        extra=telemetry.take_annotations(),
+    )
+    telemetry.record(config, event)
 
 
 if __name__ == "__main__":

@@ -21,6 +21,8 @@ import os
 import random
 import re
 
+from . import features
+
 _SERIOUS_OVERRIDE: bool | None = None
 
 
@@ -49,25 +51,14 @@ def pick(pool: list[str], seed: int | None = None, neutral: str = "") -> str:
 
 
 # --- taglines (banner subtitles) -------------------------------------------
-
-TAGLINES = [
-    "flip coins, not tables",
-    "buy low, sell slightly-less-low",
-    "financial advice from a block game 💀",
-    "outsmarting 12-year-olds since forever",
-    "number go up (most of the time)",
-    "the bazaar doesn't care about your feelings",
-    "touch grass — after this flip",
-    "not financial advice, it's literally SkyBlock",
-    "your minions would be proud",
-    "get rich or dig trying",
-    "we undercut by 0.1 coins and we will not apologize",
-    "certified hustle, uncertified accountant",
-]
+#: The default (gremlin) pool lives in :mod:`nulladdons.features` alongside the
+#: other flavors; kept here as an alias for anything that referenced it.
+TAGLINES = features.FLAVORS["gremlin"]["taglines"]
 
 
-def tagline(seed: int | None = None) -> str:
-    return pick(TAGLINES, seed)
+def tagline(seed: int | None = None, flavor: str | None = None) -> str:
+    """A tagline in the active flavor's voice ("" in serious mode)."""
+    return pick(features.taglines(flavor), seed)
 
 
 # --- cracked-flip hype label (parity with the mod's core Flair) -------------
